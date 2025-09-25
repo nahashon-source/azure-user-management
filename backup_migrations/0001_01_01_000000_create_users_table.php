@@ -18,14 +18,6 @@ return new class extends Migration
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->rememberToken();
-
-            // Extra fields expected by your seeder
-            $table->string('employee_id')->unique();
-            $table->string('phone')->nullable();
-            $table->string('location'); // ⚠️ currently a string; could be changed to location_id later
-            $table->foreignId('company_id')->constrained('companies')->cascadeOnDelete();
-            $table->enum('status', ['active', 'inactive', 'pending'])->default('active');
-
             $table->timestamps();
         });
 
