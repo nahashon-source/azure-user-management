@@ -26,5 +26,6 @@ class CreateUserService extends Command
     public function handle()
     {
         //
+        
     }
 }

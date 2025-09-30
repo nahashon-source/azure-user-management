@@ -1,440 +1,777 @@
-@extends('layouts.app')
+<!DOCTYPE html>
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="csrf-token" content="{{ csrf_token() }}" />
 
-@section('title', 'Edit User')
+    <title>Edit User</title>
 
-@section('page-title', 'Edit User')
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.bunny.net">
+    <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
-@section('header-actions')
-    <button type="submit" form="editUserForm" class="btn btn-primary">
-        <i class="fas fa-save"></i>
-        Update User
-    </button>
-@endsection
+    <!-- Font Awesome -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js" defer></script>
 
-@section('additional-styles')
-<style>
-    .edit-form-container {
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(10px);
-        border-radius: 15px;
-        padding: 30px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-        margin-bottom: 30px;
-    }
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 
-    .form-section {
-        margin-bottom: 30px;
-        padding-bottom: 25px;
-        border-bottom: 2px solid #e1e8ed;
-    }
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" defer></script>
 
-    .form-section:last-child {
-        border-bottom: none;
-        margin-bottom: 0;
-    }
-
-    .section-title {
-        font-size: 1.3em;
-        font-weight: 600;
-        color: #2c3e50;
-        margin-bottom: 20px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-
-    .form-row {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: 20px;
-        margin-bottom: 20px;
-    }
-
-    .form-group {
-        display: flex;
-        flex-direction: column;
-    }
-
-    .form-label {
-        font-weight: 600;
-        color: #2c3e50;
-        margin-bottom: 8px;
-        display: flex;
-        align-items: center;
-        gap: 5px;
-    }
-
-    .form-control {
-        padding: 12px 15px;
-        border: 2px solid #e1e8ed;
-        border-radius: 8px;
-        font-size: 14px;
-        transition: all 0.3s ease;
-        background: white;
-    }
-
-    .form-control:focus {
-        outline: none;
-        border-color: #3498db;
-        box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
-    }
-
-    .form-control.is-invalid {
-        border-color: #e74c3c;
-        box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.1);
-    }
-
-    /* Read-only styles - keeping for future use if needed */
-    .form-control:read-only,
-    .form-control[readonly] {
-        background-color: #f8f9fa;
-        color: #6c757d;
-        cursor: not-allowed;
-        border-color: #ced4da;
-    }
-
-    .form-control:read-only:focus,
-    .form-control[readonly]:focus {
-        border-color: #ced4da;
-        box-shadow: none;
-    }
-
-    select.form-control[disabled] {
-        background-color: #f8f9fa;
-        color: #6c757d;
-        cursor: not-allowed;
-        border-color: #ced4da;
-    }
-
-    .invalid-feedback {
-        color: #e74c3c;
-        font-size: 0.875em;
-        margin-top: 5px;
-    }
-
-    .current-status {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 12px;
-        border-radius: 20px;
-        font-size: 0.9em;
-        font-weight: 500;
-    }
-
-    .status-active {
-        background: #d4edda;
-        color: #155724;
-    }
-
-    .status-pending {
-        background: #fff3cd;
-        color: #856404;
-    }
-
-    .status-inactive {
-        background: #f8d7da;
-        color: #721c24;
-    }
-
-    .required {
-        color: #e74c3c;
-    }
-
-    /* Hidden table initially */
-    #modulesTableContainer {
-        display: none;
-    }
-
-    #modulesTableContainer.show {
-        display: block;
-    }
-
-    @media (max-width: 768px) {
-        .form-row {
-            grid-template-columns: 1fr;
+    <!-- Styles -->
+    <style>
+        /* ---------- Theme Variables ---------- */
+        :root {
+            --primary-color: #0b66ff;
+            --primary-contrast: #ffffff;
+            --secondary-color: #0ea5a4;
+            --bg: #e9edf2;          /* softer background */
+            --surface: #ffffff;
+            --muted: #6b7280;
+            --text: #0f172a;
+            --danger: #ef4444;
+            --success: #10b981;
+            --radius: 10px;
+            --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.06);
+            --shadow-md: 0 8px 30px rgba(15, 23, 42, 0.08);
+            --focus-ring: 3px rgba(11, 102, 255, 0.15);
+            --max-width: 1320px;
         }
-        
+
+        /* ---------- Reset + Defaults ---------- */
+        * { box-sizing: border-box; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+        html, body { height: 100%; margin: 0; }
+        body {
+            font-family: "Inter", "Figtree", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            font-size: 16px;
+            line-height: 1.45;
+        }
+
+        /* ---------- Layout ---------- */
+        .app-shell {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ---------- Main Content ---------- */
+        .main {
+            padding: 28px;
+            max-width: var(--max-width);
+            margin: 0 auto;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .page-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+        .page-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        /* ---------- Buttons ---------- */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: transform .08s ease, box-shadow .12s ease;
+        }
+        .btn:focus-visible { outline: none; box-shadow: 0 0 0 4px var(--focus-ring); }
+        .btn-primary { background: var(--primary-color); color: var(--primary-contrast); box-shadow: var(--shadow-sm); }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+        .btn-secondary { background: var(--secondary-color); color: var(--primary-contrast); }
+        .btn-ghost { background: transparent; color: var(--text); border: 1px solid rgba(15,23,42,0.06); }
+        .btn-danger { background: var(--danger); color: var(--primary-contrast); }
+        .btn-success { background: var(--success); color: var(--primary-contrast); }
+        .btn-sm { padding: 6px 10px; font-size: 0.875rem; }
+
+        /* ---------- Cards ---------- */
+        .card-surface {
+            background: var(--surface);
+            border-radius: var(--radius);
+            padding: 18px;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid rgba(15,23,42,0.04);
+        }
+
+        /* ---------- Loading Spinner ---------- */
+        .loading-spinner {
+            display: none;
+            position: fixed;
+            z-index: 9999;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255,255,255,0.98);
+            padding: 16px 18px;
+            border-radius: 10px;
+            box-shadow: var(--shadow-md);
+            text-align: center;
+            min-width: 160px;
+        }
+        .loading-spinner[aria-hidden="false"] { display: block; }
+        .spinner {
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            border: 4px solid rgba(15,23,42,0.06);
+            border-top-color: var(--primary-color);
+            margin: 0 auto 10px;
+            animation: spin 0.9s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ---------- Responsive ---------- */
+        @media (max-width: 991px) {
+            .main { padding: 18px; }
+        }
+
+        .sr-only {
+            position: absolute; width: 1px; height: 1px;
+            padding: 0; margin: -1px; overflow: hidden;
+            clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+        }
+
+        /* ---------- Edit Form Styles ---------- */
         .edit-form-container {
-            padding: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
         }
-    }
-</style>
-@endsection
 
-@section('content')
-    <div class="edit-form-container">
-        <form id="editUserForm" action="{{ route('users.update', $user) }}" method="POST">
-            @csrf
-            @method('PUT')
+        .form-section {
+            margin-bottom: 30px;
+            padding-bottom: 25px;
+            border-bottom: 2px solid #e1e8ed;
+        }
 
-            <!-- Basic Information Section -->
-            <div class="form-section">
-                <div class="section-title">
-                    <i class="fas fa-user"></i>
-                    Basic Information
-                </div>
-                
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="name" class="form-label">
-                            Full Name <span class="required">*</span>
-                        </label>
-                        <input type="text" 
-                               id="name" 
-                               name="name" 
-                               class="form-control @error('name') is-invalid @enderror" 
-                               value="{{ old('name', $user->name) }}" 
-                               required>
-                        @error('name')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                    </div>
+        .form-section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
 
-                    <div class="form-group">
-                        <label for="employee_id" class="form-label">
-                            Employee ID <span class="required">*</span>
-                        </label>
-                        <input type="text" 
-                               id="employee_id" 
-                               name="employee_id" 
-                               class="form-control @error('employee_id') is-invalid @enderror" 
-                               value="{{ old('employee_id', $user->employee_id) }}" 
-                               required>
-                        @error('employee_id')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                    </div>
-                </div>
+        .form-section-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
 
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="email" class="form-label">
-                            Email Address <span class="required">*</span>
-                        </label>
-                        <input type="email" 
-                               id="email" 
-                               name="email" 
-                               class="form-control @error('email') is-invalid @enderror" 
-                               value="{{ old('email', $user->email) }}" 
-                               required>
-                        @error('email')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                    </div>
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
 
-                    <div class="form-group">
-                        <label for="phone" class="form-label">
-                            Phone Number
-                        </label>
-                        <input type="tel" 
-                               id="phone" 
-                               name="phone" 
-                               class="form-control @error('phone') is-invalid @enderror" 
-                               value="{{ old('phone', $user->phone) }}">
-                        @error('phone')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                    </div>
-                </div>
-            </div>
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
 
-            <!-- Location and Company Section -->
-            <div class="form-section">
-                <div class="section-title">
-                    <i class="fas fa-map-marker-alt"></i>
-                    Location & Company
-                </div>
+        .form-label {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
 
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="location" class="form-label">
-                            Location <span class="required">*</span>
-                        </label>
-                        <select id="location" 
-                                name="location" 
-                                class="form-control @error('location') is-invalid @enderror" 
-                                required>
-                            <option value="">Select Location</option>
-                            @foreach($locations as $location)
-                                <option value="{{ $location->code }}" 
-                                        {{ (old('location', $user->location) == $location->code) ? 'selected' : '' }}>
-                                    {{ $location->name }} ({{ $location->code }})
-                                </option>
-                            @endforeach
-                        </select>
-                        @error('location')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                        
-                        <!-- Debug info - remove after fixing -->
-                        <small class="text-muted">Current value: {{ $user->location ?? 'null' }}</small>
-                    </div>
+        .form-control {
+            padding: 12px 15px;
+            border: 2px solid #e1e8ed;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+            background: white;
+        }
 
-                    <div class="form-group">
-                        <label for="company_id" class="form-label">
-                            Company <span class="required">*</span>
-                        </label>
-                        <select id="company_id" 
-                                name="company_id" 
-                                class="form-control @error('company_id') is-invalid @enderror" 
-                                required>
-                            <option value="">Select Company</option>
-                            @foreach($companies as $company)
-                                <option value="{{ $company->id }}" 
-                                        {{ (old('company_id', $user->company_id) == $company->id) ? 'selected' : '' }}>
-                                    {{ $company->name }}
-                                </option>
-                            @endforeach
-                        </select>
-                        @error('company_id')
-                            <div class="invalid-feedback">{{ $message }}</div>
-                        @enderror
-                        
-                        <!-- Debug info - remove after fixing -->
-                        <small class="text-muted">Current value: {{ $user->company_id ?? 'null' }}</small>
-                    </div>
-                </div>
+        .form-control:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+        }
 
-                <div class="form-row">
-                    <div class="form-group">
-                        <label class="form-label">Current Status</label>
-                        <div class="current-status status-{{ $user->status }}">
-                            <i class="fas fa-circle"></i>
-                            {{ ucfirst($user->status) }}
-                        </div>
-                    </div>
-                </div>
-            </div>
+        .form-control.is-invalid {
+            border-color: #e74c3c;
+            box-shadow: 0 0 0 3px rgba(231, 76, 60, 0.1);
+        }
 
-            <!-- Module Assignments Section -->
-            <div class="form-section">
-                <div class="section-title">
-                    <i class="fas fa-th-large"></i>
-                    Module Assignments
-                    <button type="button" class="btn btn-sm btn-success ms-3" onclick="addModuleRow()">
-                        <i class="fas fa-plus"></i> New
-                    </button>
-                </div>
+        .form-control:read-only,
+        .form-control[readonly] {
+            background-color: #f8f9fa;
+            color: #6c757d;
+            cursor: not-allowed;
+            border-color: #ced4da;
+        }
 
-                <div id="modulesTableContainer" class="table-responsive">
-                    <table class="table table-bordered align-middle" id="modulesTable">
-                        <thead class="table-light">
-                            <tr>
-                                <th style="width: 25%">Office</th>
-                                <th style="width: 25%">Module</th>
-                                <th style="width: 25%">Role</th>
-                                <th style="width: 15%">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <!-- Table body will be populated by JavaScript when "New" is clicked -->
-                        </tbody>
-                    </table>
-                    
-                    <div style="margin-top: 15px;">
-                        <button type="button" class="btn btn-sm btn-secondary" onclick="hideModuleTable()">
-                            <i class="fas fa-times"></i> Close
-                        </button>
+        .form-control:read-only:focus,
+        .form-control[readonly]:focus {
+            border-color: #ced4da;
+            box-shadow: none;
+        }
+
+        select.form-control[disabled] {
+            background-color: #f8f9fa;
+            color: #6c757d;
+            cursor: not-allowed;
+            border-color: #ced4da;
+        }
+
+        .invalid-feedback {
+            color: #e74c3c;
+            font-size: 0.875em;
+            margin-top: 5px;
+        }
+
+        .current-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 500;
+        }
+
+        .status-active {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-inactive {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .required {
+            color: #e74c3c;
+        }
+
+        #modulesTableContainer {
+            display: block;
+        }
+
+        .checkbox-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            padding: 10px;
+            border: 1px solid #e1e8ed;
+            border-radius: 8px;
+        }
+
+        .checkbox-group label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+        }
+
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .edit-form-container {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-shell" role="application">
+        <!-- Main -->
+        <main class="main" role="main">
+            <header class="page-header">
+                <div class="page-title">
+                    <i class="fas fa-folder-open" style="color:var(--primary-color);"></i>
+                    <div>
+                        <div>Edit User</div>
                     </div>
                 </div>
-            </div>
-
-            <!-- Form Actions -->
-            <div class="form-section">
-                <div style="display: flex; gap: 15px; justify-content: flex-end;">
-                    <button type="submit" class="btn btn-primary">
+                <div>
+                    <button type="submit" form="editUserForm" class="btn btn-primary">
                         <i class="fas fa-save"></i>
                         Update User
                     </button>
                 </div>
-            </div>
-        </form>
+            </header>
+
+            <section>
+                <div class="edit-form-container">
+                    <form id="editUserForm" action="{{ route('users.update', $user) }}" method="POST">
+                        @csrf
+                        @method('PUT')
+
+                        <!-- Basic Information Section -->
+                        <div class="form-section">
+                            <div class="form-section-title">
+                                <i class="fas fa-user"></i>
+                                Basic Information
+                            </div>
+                            
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="name" class="form-label">
+                                        Full Name <span class="required">*</span>
+                                    </label>
+                                    <input type="text" 
+                                           id="name" 
+                                           name="name" 
+                                           class="form-control @error('name') is-invalid @enderror" 
+                                           value="{{ old('name', $user->name) }}" 
+                                           readonly>
+                                    @error('name')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="employee_id" class="form-label">
+                                        Employee ID <span class="required">*</span>
+                                    </label>
+                                    <input type="text" 
+                                           id="employee_id" 
+                                           name="employee_id" 
+                                           class="form-control @error('employee_id') is-invalid @enderror" 
+                                           value="{{ old('employee_id', $user->employee_id) }}" 
+                                           readonly>
+                                    @error('employee_id')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="email" class="form-label">
+                                        Email Address <span class="required">*</span>
+                                    </label>
+                                    <input type="email" 
+                                           id="email" 
+                                           name="email" 
+                                           class="form-control @error('email') is-invalid @enderror" 
+                                           value="{{ old('email', $user->email) }}" 
+                                           readonly>
+                                    @error('email')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="phone" class="form-label">
+                                        Phone Number
+                                    </label>
+                                    <input type="tel" 
+                                           id="phone" 
+                                           name="phone" 
+                                           class="form-control @error('phone') is-invalid @enderror" 
+                                           value="{{ old('phone', $user->phone) }}"
+                                           readonly>
+                                    @error('phone')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Location and Company Section -->
+                        <div class="form-section">
+                            <div class="form-section-title">
+                                <i class="fas fa-map-marker-alt"></i>
+                                Location & Company
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="location" class="form-label">
+                                        Location <span class="required">*</span>
+                                    </label>
+                                    <select id="location" 
+                                            name="location" 
+                                            class="form-control @error('location') is-invalid @enderror" 
+                                            required>
+                                        <option value="">Select Location</option>
+                                        @foreach($locations as $location)
+                                            <option value="{{ $location->code }}" 
+                                                    {{ (old('location', $user->location) == $location->code) ? 'selected' : '' }}>
+                                                {{ $location->name }} ({{ $location->code }})
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    @error('location')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                    
+                                    <small class="text-muted">Current value: {{ $user->location ?? 'null' }}</small>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="company_id" class="form-label">
+                                        Company <span class="required">*</span>
+                                    </label>
+                                    <select id="company_id" 
+                                            name="company_id" 
+                                            class="form-control @error('company_id') is-invalid @enderror" 
+                                            required>
+                                        <option value="">Select Company</option>
+                                        @foreach($companies as $company)
+                                            <option value="{{ $company->id }}" 
+                                                    {{ (old('company_id', $user->company_id) == $company->id) ? 'selected' : '' }}>
+                                                {{ $company->name }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                    @error('company_id')
+                                        <div class="invalid-feedback">{{ $message }}</div>
+                                    @enderror
+                                    
+                                    <small class="text-muted">Current value: {{ $user->company_id ?? 'null' }}</small>
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">Current Status</label>
+                                    <div class="current-status status-{{ $user->status }}">
+                                        <i class="fas fa-circle"></i>
+                                        {{ ucfirst($user->status) }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Module Assignments Section -->
+                        <div class="form-section">
+                            <div class="form-section-title">
+                                <i class="fas fa-th-large"></i>
+                                Module Assignments
+                                <button type="button" class="btn btn-sm btn-success ms-3" onclick="addModuleRow()">
+                                    <i class="fas fa-plus"></i> New
+                                </button>
+                            </div>
+
+                            <div id="modulesTableContainer" class="table-responsive">
+                                <table class="table table-bordered align-middle" id="modulesTable">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th style="width: 25%">Office</th>
+                                            <th style="width: 25%">Module</th>
+                                            <th style="width: 25%">Role</th>
+                                            <th style="width: 15%">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @forelse ($assignments ?? [] as $assignmentIndex => $assignment)
+                                            <tr>
+                                                <td>
+                                                    <div class="checkbox-group">
+                                                        <label>
+                                                            <input type="checkbox" name="assignments[{{ $assignmentIndex }}][location][]" value="all" onchange="toggleAllCheckboxes(this, 'location', {{ $assignmentIndex }})" {{ in_array('all', $assignment['locations'] ?? []) ? 'checked' : '' }}>
+                                                            All Locations
+                                                        </label>
+                                                        @foreach($locations as $location)
+                                                            <label>
+                                                                <input type="checkbox" name="assignments[{{ $assignmentIndex }}][location][]" value="{{ $location->code }}" {{ in_array('all', $assignment['locations'] ?? []) ? 'disabled' : '' }} {{ in_array($location->code, $assignment['locations'] ?? []) ? 'checked' : '' }} onchange="validateCheckboxes(this, 'location', {{ $assignmentIndex }})">
+                                                                {{ $location->name }}
+                                                            </label>
+                                                        @endforeach
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div class="checkbox-group">
+                                                        <label>
+                                                            <input type="checkbox" name="assignments[{{ $assignmentIndex }}][module_id][]" value="all" onchange="toggleAllCheckboxes(this, 'module_id', {{ $assignmentIndex }})" {{ in_array('all', $assignment['module_ids'] ?? []) ? 'checked' : '' }}>
+                                                            All Modules
+                                                        </label>
+                                                        @foreach($modules as $module)
+                                                            <label>
+                                                                <input type="checkbox" name="assignments[{{ $assignmentIndex }}][module_id][]" value="{{ $module->id }}" {{ in_array('all', $assignment['module_ids'] ?? []) ? 'disabled' : '' }} {{ in_array($module->id, $assignment['module_ids'] ?? []) ? 'checked' : '' }} onchange="validateCheckboxes(this, 'module_id', {{ $assignmentIndex }})">
+                                                                {{ $module->name }}
+                                                            </label>
+                                                        @endforeach
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div class="checkbox-group">
+                                                        <label>
+                                                            <input type="checkbox" name="assignments[{{ $assignmentIndex }}][role_id][]" value="all" onchange="toggleAllCheckboxes(this, 'role_id', {{ $assignmentIndex }})" {{ in_array('all', $assignment['role_ids'] ?? []) ? 'checked' : '' }}>
+                                                            All Roles
+                                                        </label>
+                                                        @foreach($roles as $role)
+                                                            <label>
+                                                                <input type="checkbox" name="assignments[{{ $assignmentIndex }}][role_id][]" value="{{ $role->id }}" {{ in_array('all', $assignment['role_ids'] ?? []) ? 'disabled' : '' }} {{ in_array($role->id, $assignment['role_ids'] ?? []) ? 'checked' : '' }} onchange="validateCheckboxes(this, 'role_id', {{ $assignmentIndex }})">
+                                                                {{ $role->name }}
+                                                            </label>
+                                                        @endforeach
+                                                    </div>
+                                                </td>
+                                                <td class="text-center">
+                                                    <button type="button" class="btn btn-sm btn-danger" onclick="removeRow(this)">
+                                                        <i class="fas fa-trash"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        @empty
+                                            <!-- No existing assignments -->
+                                        @endforelse
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Form Actions -->
+                        <div class="form-section">
+                            <div style="display: flex; gap: 15px; justify-content: flex-end;">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-save"></i>
+                                    Update User
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </section>
+        </main>
     </div>
-@endsection
 
-@section('additional-scripts')
-<script>
-    let rowIndex = 0;
+    <!-- Loading Spinner -->
+    <div id="loadingSpinner" class="loading-spinner" aria-hidden="true">
+        <div class="spinner"></div>
+        <div id="loadingText">Processing…</div>
+    </div>
 
-    function showModuleTable() {
-        const tableContainer = document.getElementById('modulesTableContainer');
-        tableContainer.classList.add('show');
-        
-        // Add a new row when "New" is clicked
-        addModuleRow();
-    }
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js" defer></script>
 
-    function hideModuleTable() {
-        const tableContainer = document.getElementById('modulesTableContainer');
-        tableContainer.classList.remove('show');
-    }
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Axios defaults
+            if (window.axios) {
+                axios.defaults.headers.common['X-CSRF-TOKEN'] = document.querySelector('meta[name="csrf-token"]').content;
+                axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
+            }
 
-    function addModuleRow() {
-        // Show the table if it's not visible
-        const tableContainer = document.getElementById('modulesTableContainer');
-        if (!tableContainer.classList.contains('show')) {
-            tableContainer.classList.add('show');
+            // Loading helpers
+            window.showLoading = () => {
+                const el = document.getElementById('loadingSpinner');
+                el?.setAttribute('aria-hidden', 'false');
+                el.style.display = 'block';
+            };
+            window.hideLoading = () => {
+                const el = document.getElementById('loadingSpinner');
+                el?.setAttribute('aria-hidden', 'true');
+                el.style.display = 'none';
+            };
+
+            // SweetAlert helpers
+            window.showAlert = (type, title, message) => {
+                if (window.Swal) {
+                    Swal.fire({ icon: type, title, text: message, toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 });
+                } else {
+                    alert(title + "\n\n" + message);
+                }
+            };
+            window.confirmAction = (title, text, callback) => {
+                if (window.Swal) {
+                    Swal.fire({
+                        title, text, icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonColor: getComputedStyle(document.documentElement).getPropertyValue('--primary-color').trim(),
+                        cancelButtonColor: '#6b7280',
+                        confirmButtonText: 'Yes, proceed!'
+                    }).then(result => {
+                        if (result.isConfirmed && typeof callback === 'function') callback();
+                    });
+                } else if (confirm(title + "\n\n" + text)) {
+                    callback?.();
+                }
+            };
+
+            // Laravel flash + validation messages
+            @if ($errors->any())
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Validation Error',
+                    html: `<ul style="text-align:left;">@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul>`
+                });
+            @endif
+            @if (session('success'))
+                showAlert('success', 'Success', '{{ session("success") }}');
+            @endif
+            @if (session('error'))
+                showAlert('error', 'Error', '{{ session("error") }}');
+            @endif
+        });
+
+        let rowIndex = {{ count($assignments ?? []) }};
+
+        function addModuleRow() {
+            const tableBody = document.querySelector('#modulesTable tbody');
+            const newRow = document.createElement('tr');
+            newRow.innerHTML = `
+                <td>
+                    <div class="checkbox-group">
+                        <label>
+                            <input type="checkbox" name="assignments[${rowIndex}][location][]" value="all" onchange="toggleAllCheckboxes(this, 'location', ${rowIndex})">
+                            All Locations
+                        </label>
+                        @foreach($locations as $location)
+                            <label>
+                                <input type="checkbox" name="assignments[${rowIndex}][location][]" value="{{ $location->code }}" onchange="validateCheckboxes(this, 'location', ${rowIndex})">
+                                {{ $location->name }}
+                            </label>
+                        @endforeach
+                    </div>
+                </td>
+                <td>
+                    <div class="checkbox-group">
+                        <label>
+                            <input type="checkbox" name="assignments[${rowIndex}][module_id][]" value="all" onchange="toggleAllCheckboxes(this, 'module_id', ${rowIndex})">
+                            All Modules
+                        </label>
+                        @foreach($modules as $module)
+                            <label>
+                                <input type="checkbox" name="assignments[${rowIndex}][module_id][]" value="{{ $module->id }}" onchange="validateCheckboxes(this, 'module_id', ${rowIndex})">
+                                {{ $module->name }}
+                            </label>
+                        @endforeach
+                    </div>
+                </td>
+                <td>
+                    <div class="checkbox-group">
+                        <label>
+                            <input type="checkbox" name="assignments[${rowIndex}][role_id][]" value="all" onchange="toggleAllCheckboxes(this, 'role_id', ${rowIndex})">
+                            All Roles
+                        </label>
+                        @foreach($roles as $role)
+                            <label>
+                                <input type="checkbox" name="assignments[${rowIndex}][role_id][]" value="{{ $role->id }}" onchange="validateCheckboxes(this, 'role_id', ${rowIndex})">
+                                {{ $role->name }}
+                            </label>
+                        @endforeach
+                    </div>
+                </td>
+                <td class="text-center">
+                    <button type="button" class="btn btn-sm btn-danger" onclick="removeRow(this)">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            `;
+            tableBody.appendChild(newRow);
+            rowIndex++;
         }
-        
-        const tableBody = document.querySelector('#modulesTable tbody');
-        const newRow = document.createElement('tr');
-        newRow.innerHTML = `
-            <td>
-                <select name="modules[${rowIndex}][location]" class="form-control">
-                    <option value="">Select Office</option>
-                    @foreach($locations as $location)
-                        <option value="{{ $location->code }}">{{ $location->name }}</option>
-                    @endforeach
-                </select>
-            </td>
-            <td>
-                <select name="modules[${rowIndex}][module_id]" class="form-control">
-                    <option value="">Select Module</option>
-                    @foreach($modules as $module)
-                        <option value="{{ $module->id }}">{{ $module->name }}</option>
-                    @endforeach
-                </select>
-            </td>
-            <td>
-                <select name="modules[${rowIndex}][role_id]" class="form-control">
-                    <option value="">Select Role</option>
-                    @foreach($roles as $role)
-                        <option value="{{ $role->id }}">{{ $role->name }}</option>
-                    @endforeach
-                </select>
-            </td>
-            <td class="text-center">
-                <button type="button" class="btn btn-sm btn-danger" onclick="removeRow(this)">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </td>
-        `;
-        tableBody.appendChild(newRow);
-        rowIndex++;
-    }
 
-    function removeRow(button) {
-        const row = button.closest('tr');
-        row.remove();
-        
-        // Don't hide the table when rows are removed - keep it visible for adding more modules
-    }
+        function removeRow(button) {
+            const row = button.closest('tr');
+            row.remove();
+        }
 
-    // Form submission loading state
-    document.getElementById('editUserForm').addEventListener('submit', function(e) {
-        const submitBtn = this.querySelector('button[type="submit"]');
-        const originalText = submitBtn.innerHTML;
-        
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
-        
-        setTimeout(() => {
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = originalText;
-        }, 10000);
-    });
+        function toggleAllCheckboxes(allCheckbox, field, index) {
+            const checkboxes = allCheckbox.closest('.checkbox-group').querySelectorAll(`input[name^="assignments[${index}][${field}][]"]:not([value="all"])`);
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = allCheckbox.checked;
+                checkbox.disabled = allCheckbox.checked;
+            });
+        }
 
-    // Table is hidden by default - only shows when "New" button is clicked
-</script>
-@endsection
+        function validateCheckboxes(checkbox, field, index) {
+            const allCheckbox = checkbox.closest('.checkbox-group').querySelector(`input[name="assignments[${index}][${field}][]"][value="all"]`);
+            const individualCheckboxes = checkbox.closest('.checkbox-group').querySelectorAll(`input[name^="assignments[${index}][${field}][]"]:not([value="all"])`);
+            if (checkbox.value !== 'all' && checkbox.checked) {
+                allCheckbox.checked = false;
+                individualCheckboxes.forEach(cb => cb.disabled = false);
+            } else if (!checkbox.checked) {
+                // Check if any individual checkboxes are still checked
+                const anyChecked = Array.from(individualCheckboxes).some(cb => cb.checked);
+                if (!anyChecked) {
+                    allCheckbox.checked = false;
+                    individualCheckboxes.forEach(cb => cb.disabled = false);
+                }
+            }
+        }
+
+        document.getElementById('editUserForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            
+            // Validate that each row has at least one selection in each category
+            const rows = document.querySelectorAll('#modulesTable tbody tr');
+            let isValid = true;
+            rows.forEach((row, index) => {
+                ['location', 'module_id', 'role_id'].forEach(field => {
+                    const checkboxes = row.querySelectorAll(`input[name^="assignments[${index}][${field}][]"]`);
+                    const anyChecked = Array.from(checkboxes).some(cb => cb.checked);
+                    if (!anyChecked) {
+                        isValid = false;
+                        showAlert('error', 'Validation Error', `Please select at least one ${field.replace('_id', '')} in row ${index + 1}`);
+                    }
+                });
+            });
+
+            if (!isValid) {
+                return;
+            }
+
+            showLoading();
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Updating...';
+            
+            axios.post(this.action, new FormData(this))
+                .then(response => {
+                    showAlert('success', 'Success', 'User updated successfully');
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalText;
+                    hideLoading();
+                })
+                .catch(error => {
+                    showAlert('error', 'Error', error.response?.data?.message || 'Failed to update user');
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = originalText;
+                    hideLoading();
+                });
+        });
+    </script>
+</body>
+</html>

@@ -1,192 +1,122 @@
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="csrf-token" content="{{ csrf_token() }}" />
 
     <title>@yield('title', 'Azure User Management System')</title>
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
-    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
     <!-- Font Awesome -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js"></script>
-    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js" defer></script>
+
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    
+
     <!-- SweetAlert2 -->
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11" defer></script>
+
     <!-- Chart.js -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
 
-    <!-- Custom Styles -->
+    <!-- Theme + Custom Styles -->
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        /* ---------- Theme Variables ---------- */
+        :root {
+            --primary-color: #0b66ff;
+            --primary-contrast: #ffffff;
+            --secondary-color: #0ea5a4;
+            --bg: #e9edf2;          /* softer background */
+            --surface: #ffffff;
+            --muted: #6b7280;
+            --text: #0f172a;
+            --danger: #ef4444;
+            --success: #10b981;
+            --radius: 10px;
+            --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.06);
+            --shadow-md: 0 8px 30px rgba(15, 23, 42, 0.08);
+            --focus-ring: 3px rgba(11, 102, 255, 0.15);
+            --max-width: 1320px;
+            --nav-width: 260px;
+            --mobile-nav-height: 64px;
         }
 
+        /* ---------- Reset + Defaults ---------- */
+        * { box-sizing: border-box; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+        html, body { height: 100%; margin: 0; }
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: "Inter", "Figtree", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            font-size: 16px;
+            line-height: 1.45;
+        }
+
+        /* ---------- Layout ---------- */
+        .app-shell {
             min-height: 100vh;
-            color: #333;
+            display: flex;
+            flex-direction: column;
         }
 
-        .container {
-            max-width: 1400px;
+        /* ---------- Main Content ---------- */
+        .main {
+            padding: 28px;
+            max-width: var(--max-width);
             margin: 0 auto;
-            padding: 20px;
-        }
-
-        .header {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 15px;
-            padding: 20px;
-            margin-bottom: 30px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            width: 100%;
             display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .page-header {
+            display: flex;
+            align-items: center;
             justify-content: space-between;
-            align-items: center;
+            gap: 16px;
         }
-
-        .header h1 {
-            color: #2c3e50;
+        .page-title {
             display: flex;
             align-items: center;
-            gap: 10px;
-            margin: 0;
+            gap: 12px;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text);
         }
 
-        .header-actions {
-            display: flex;
-            gap: 15px;
-            align-items: center;
-        }
-
-        .nav-menu {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-
-        .nav-link {
-            color: #2c3e50;
-            text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        .nav-link:hover {
-            background: rgba(52, 152, 219, 0.1);
-            color: #3498db;
-        }
-
+        /* ---------- Buttons ---------- */
         .btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            text-decoration: none;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: transform .08s ease, box-shadow .12s ease;
+        }
+        .btn:focus-visible { outline: none; box-shadow: 0 0 0 4px var(--focus-ring); }
+        .btn-primary { background: var(--primary-color); color: var(--primary-contrast); box-shadow: var(--shadow-sm); }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+        .btn-secondary { background: var(--secondary-color); color: var(--primary-contrast); }
+        .btn-ghost { background: transparent; color: var(--text); border: 1px solid rgba(15,23,42,0.06); }
+
+        /* ---------- Cards ---------- */
+        .card-surface {
+            background: var(--surface);
+            border-radius: var(--radius);
+            padding: 18px;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid rgba(15,23,42,0.04);
         }
 
-        .btn-primary {
-            background: linear-gradient(145deg, #3498db, #2980b9);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background: linear-gradient(145deg, #2980b9, #21618c);
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-            color: white;
-        }
-
-        .btn-success {
-            background: linear-gradient(145deg, #27ae60, #229954);
-            color: white;
-        }
-
-        .btn-warning {
-            background: linear-gradient(145deg, #f39c12, #e67e22);
-            color: white;
-        }
-
-        .btn-danger {
-            background: linear-gradient(145deg, #e74c3c, #c0392b);
-            color: white;
-        }
-
-        .btn-secondary {
-            background: linear-gradient(145deg, #95a5a6, #7f8c8d);
-            color: white;
-        }
-
-        .btn-sm {
-            padding: 6px 12px;
-            font-size: 12px;
-        }
-
-        .glass-panel {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-        }
-
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            backdrop-filter: blur(5px);
-        }
-
-        .modal-content {
-            background: white;
-            margin: 5% auto;
-            padding: 30px;
-            border-radius: 15px;
-            width: 90%;
-            max-width: 600px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            animation: modalSlideIn 0.3s ease-out;
-        }
-
-        @keyframes modalSlideIn {
-            from {
-                opacity: 0;
-                transform: translateY(-50px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        /* Loading Spinner */
+        /* ---------- Loading Spinner ---------- */
         .loading-spinner {
             display: none;
             position: fixed;
@@ -194,172 +124,132 @@
             left: 50%;
             top: 50%;
             transform: translate(-50%, -50%);
-            background: rgba(255, 255, 255, 0.9);
-            padding: 20px;
+            background: rgba(255,255,255,0.98);
+            padding: 16px 18px;
             border-radius: 10px;
+            box-shadow: var(--shadow-md);
             text-align: center;
+            min-width: 160px;
         }
-
+        .loading-spinner[aria-hidden="false"] { display: block; }
         .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #3498db;
+            width: 36px; height: 36px;
             border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 2s linear infinite;
+            border: 4px solid rgba(15,23,42,0.06);
+            border-top-color: var(--primary-color);
             margin: 0 auto 10px;
+            animation: spin 0.9s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ---------- Responsive ---------- */
+        @media (max-width: 991px) {
+            .main { padding: 18px; }
         }
 
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .sr-only {
+            position: absolute; width: 1px; height: 1px;
+            padding: 0; margin: -1px; overflow: hidden;
+            clip: rect(0,0,0,0); white-space: nowrap; border: 0;
         }
 
-        @media (max-width: 768px) {
-            .header {
-                flex-direction: column;
-                gap: 20px;
-            }
-
-            .header-actions {
-                flex-direction: column;
-                width: 100%;
-            }
-
-            .nav-menu {
-                flex-direction: column;
-                width: 100%;
-            }
-
-            .container {
-                padding: 10px;
-            }
-        }
-
-        @yield('additional-styles')
+        @yield('additional-styles');
     </style>
-    
+
     @stack('styles')
 </head>
-
 <body>
-    <!-- Loading Spinner -->
-    <div class="loading-spinner" id="loadingSpinner">
-        <div class="spinner"></div>
-        <p>Processing...</p>
-    </div>
-
-    <div class="container">
-        <!-- Navigation Header -->
-        <div class="header">
-            <h1>
-                <i class="fas fa-cloud"></i> 
-                @yield('page-title', 'Azure User Management System')
-            </h1>
-            <div class="header-actions">
-                @yield('header-actions')
-                
-                <!-- Navigation Menu -->
-                <div class="nav-menu">
-                    <a href="{{ route('dashboard.index') }}" class="nav-link">
-                        <i class="fas fa-tachometer-alt"></i> Dashboard
-                    </a>
-                    <a href="{{ route('users.index') }}" class="nav-link">
-                        <i class="fas fa-users"></i> Users
-                    </a>
-                    <a href="{{ route('reports.index') }}" class="nav-link">
-                        <i class="fas fa-chart-bar"></i> Reports
-                    </a>
-                    <a href="{{ route('modules.index') }}" class="nav-link">
-                        <i class="fas fa-cubes"></i> Modules
-                    </a>
+    <div class="app-shell" role="application">
+        <!-- Main -->
+        <main class="main" role="main">
+            <header class="page-header">
+                <div class="page-title">
+                    <i class="fas fa-folder-open" style="color:var(--primary-color);"></i>
+                    <div>
+                        <div>@yield('page-title', 'Azure User Management System')</div>
+                        @hasSection('page-subtitle')
+                            <div class="muted">@yield('page-subtitle')</div>
+                        @endif
+                    </div>
                 </div>
-            </div>
-        </div>
+                <div>@yield('header-actions')</div>
+            </header>
 
-        <!-- Page Content -->
-        <main>
-            @yield('content')
+            <section>
+                @yield('content')
+            </section>
         </main>
     </div>
 
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
-    <!-- Axios for HTTP requests -->
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <!-- Loading Spinner -->
+    <div id="loadingSpinner" class="loading-spinner" aria-hidden="true">
+        <div class="spinner"></div>
+        <div id="loadingText">Processing…</div>
+    </div>
 
-    <!-- Global JavaScript -->
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js" defer></script>
+
     <script>
-        // Configure Axios defaults
-        axios.defaults.headers.common['X-CSRF-TOKEN'] = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-        axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
-
-        // Global functions
-        function showLoading() {
-            document.getElementById('loadingSpinner').style.display = 'block';
-        }
-
-        function hideLoading() {
-            document.getElementById('loadingSpinner').style.display = 'none';
-        }
-
-        function showAlert(type, title, message) {
-            Swal.fire({
-                icon: type,
-                title: title,
-                text: message,
-                toast: true,
-                position: 'top-end',
-                showConfirmButton: false,
-                timer: 3000,
-                timerProgressBar: true
-            });
-        }
-
-        function confirmAction(title, text, callback) {
-            Swal.fire({
-                title: title,
-                text: text,
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#3085d6',
-                cancelButtonColor: '#d33',
-                confirmButtonText: 'Yes, proceed!'
-            }).then((result) => {
-                if (result.isConfirmed && typeof callback === 'function') {
-                    callback();
-                }
-            });
-        }
-
-        // Close modals when clicking outside
-        window.onclick = function(event) {
-            const modals = document.getElementsByClassName('modal');
-            for (let i = 0; i < modals.length; i++) {
-                if (event.target === modals[i]) {
-                    modals[i].style.display = 'none';
-                }
+        document.addEventListener('DOMContentLoaded', function() {
+            // Axios defaults
+            if (window.axios) {
+                axios.defaults.headers.common['X-CSRF-TOKEN'] = document.querySelector('meta[name="csrf-token"]').content;
+                axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
             }
-        }
 
-        // Handle Laravel validation errors
-        @if ($errors->any())
-            Swal.fire({
-                icon: 'error',
-                title: 'Validation Error',
-                html: '<ul style="text-align: left;">@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul>'
-            });
-        @endif
+            // Loading helpers
+            window.showLoading = () => {
+                const el = document.getElementById('loadingSpinner');
+                el?.setAttribute('aria-hidden', 'false');
+                el.style.display = 'block';
+            };
+            window.hideLoading = () => {
+                const el = document.getElementById('loadingSpinner');
+                el?.setAttribute('aria-hidden', 'true');
+                el.style.display = 'none';
+            };
 
-        // Handle Laravel success messages
-        @if (session('success'))
-            showAlert('success', 'Success', '{{ session("success") }}');
-        @endif
+            // SweetAlert helpers
+            window.showAlert = (type, title, message) => {
+                if (window.Swal) {
+                    Swal.fire({ icon: type, title, text: message, toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 });
+                } else {
+                    alert(title + "\n\n" + message);
+                }
+            };
+            window.confirmAction = (title, text, callback) => {
+                if (window.Swal) {
+                    Swal.fire({
+                        title, text, icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonColor: getComputedStyle(document.documentElement).getPropertyValue('--primary-color').trim(),
+                        cancelButtonColor: '#6b7280',
+                        confirmButtonText: 'Yes, proceed!'
+                    }).then(result => {
+                        if (result.isConfirmed && typeof callback === 'function') callback();
+                    });
+                } else if (confirm(title + "\n\n" + text)) {
+                    callback?.();
+                }
+            };
 
-        @if (session('error'))
-            showAlert('error', 'Error', '{{ session("error") }}');
-        @endif
+            // Laravel flash + validation messages
+            @if ($errors->any())
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Validation Error',
+                    html: `<ul style="text-align:left;">@foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul>`
+                });
+            @endif
+            @if (session('success'))
+                showAlert('success', 'Success', '{{ session("success") }}');
+            @endif
+            @if (session('error'))
+                showAlert('error', 'Error', '{{ session("error") }}');
+            @endif
+        });
     </script>
 
     @stack('scripts')

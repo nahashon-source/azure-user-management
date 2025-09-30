@@ -196,4 +196,96 @@ class User extends Authenticatable
         
         return $permissions;
     }
+
+
+    /**
+     * Check if user is provisioned to Azure AD
+     */
+    public function isProvisionedToAzure(): bool
+    {
+        return !empty($this->azure_id) && !empty($this->azure_upn);
+    }
+
+    /**
+     * Check if user provisioning is complete (all modules assigned successfully)
+     */
+    public function isFullyProvisioned(): bool
+    {
+        if (!$this->isProvisionedToAzure()) {
+            return false;
+        }
+
+        return $this->status === 'active';
+    }
+
+    /**
+     * Check if user has partial provisioning (Azure created but some modules failed)
+     */
+    public function isPartiallyProvisioned(): bool
+    {
+        return $this->isProvisionedToAzure() && $this->status === 'partial';
+    }
+
+    /**
+     * Get modules with failed provisioning
+     * Returns collection of modules where external sync failed
+     */
+    public function getFailedModuleAssignments()
+    {
+        return $this->modules()
+            ->wherePivot('external_sync_status', 'failed')
+            ->get();
+    }
+
+    /**
+     * Get provisioning status summary
+     */
+    public function getProvisioningStatus(): array
+    {
+        $totalModules = $this->modules()->count();
+        $syncedModules = $this->modules()
+            ->wherePivot('external_sync_status', 'synced')
+            ->count();
+        $failedModules = $this->modules()
+            ->wherePivot('external_sync_status', 'failed')
+            ->count();
+        $pendingModules = $this->modules()
+            ->wherePivot('external_sync_status', 'pending')
+            ->count();
+
+        return [
+            'azure_provisioned' => $this->isProvisionedToAzure(),
+            'status' => $this->status,
+            'total_modules' => $totalModules,
+            'synced_modules' => $syncedModules,
+            'failed_modules' => $failedModules,
+            'pending_modules' => $pendingModules,
+            'completion_percentage' => $totalModules > 0 
+                ? round(($syncedModules / $totalModules) * 100, 2) 
+                : 0,
+        ];
+    }
+
+    /**
+     * Check if user can be deleted from Azure AD
+     * (Only if status is inactive/disabled)
+     */
+    public function canDeleteFromAzure(): bool
+    {
+        return $this->isProvisionedToAzure() 
+            && in_array($this->status, ['inactive', 'disabled']);
+    }
+
+    /**
+     * Get Azure profile URL (for admin reference)
+     */
+    public function getAzureProfileUrl(): ?string
+    {
+        if (!$this->azure_id) {
+            return null;
+        }
+
+        $tenantId = config('azure.tenant_id');
+        return "https://portal.azure.com/#view/Microsoft_AAD_UsersAndTenants/UserProfileMenuBlade/~/overview/userId/{$this->azure_id}/tenantId/{$tenantId}";
+    }
 }

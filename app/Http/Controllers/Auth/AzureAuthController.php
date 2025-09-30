@@ -9,10 +9,10 @@ use Illuminate\Support\Facades\Log;
 
 class AzureAuthController extends Controller
 {
-    public function __construct()
-    {
-        $this->middleware('auth');
-    }
+    // public function __construct()
+    // {
+    //     $this->middleware('auth');
+    // }
 
     /**
      * Redirect to Azure AD for authentication

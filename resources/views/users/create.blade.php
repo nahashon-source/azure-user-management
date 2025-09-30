@@ -15,77 +15,9 @@
 <style>
     .main-content {
         display: grid;
-        grid-template-columns: 400px 1fr;
-        gap: 30px;
+        grid-template-columns: 1fr;
+        gap: 20px;
         align-items: start;
-    }
-
-    .procedures-panel {
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(10px);
-        border-radius: 15px;
-        padding: 25px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-    }
-
-    .procedures-title {
-        font-size: 1.3em;
-        font-weight: 600;
-        color: #2c3e50;
-        margin-bottom: 20px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-
-    .procedure-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 12px 15px;
-        margin-bottom: 8px;
-        border-radius: 10px;
-        background: #f8f9fa;
-        border-left: 4px solid #3498db;
-        transition: all 0.3s ease;
-    }
-
-    .procedure-item:hover {
-        background: #e3f2fd;
-        transform: translateX(5px);
-    }
-
-    .procedure-text {
-        font-weight: 500;
-        color: #2c3e50;
-    }
-
-    .status-badge {
-        padding: 4px 8px;
-        border-radius: 15px;
-        font-size: 0.8em;
-        font-weight: 600;
-        text-transform: uppercase;
-    }
-
-    .status-away {
-        background: #fff3cd;
-        color: #856404;
-    }
-
-    .status-mock {
-        background: #d4edda;
-        color: #155724;
-    }
-
-    .status-ready {
-        background: #d1ecf1;
-        color: #0c5460;
-    }
-
-    .status-processing {
-        background: #f8d7da;
-        color: #721c24;
     }
 
     .user-form-panel {
@@ -206,9 +138,19 @@
         color: #2c3e50;
     }
 
-    .role-dropdown {
-        width: 100%;
+    .role-group {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
         margin-top: 10px;
+        max-height: 150px;
+        overflow-y: auto;
+    }
+
+    .role-group label {
+        display: flex;
+        align-items: center;
+        gap: 5px;
     }
 
     .permissions-display {
@@ -265,65 +207,12 @@
 
 @section('content')
     <div class="main-content">
-        <!-- Procedures Panel -->
-        <div class="procedures-panel">
-            <div class="procedures-title">
-                <i class="fas fa-list-check"></i>
-                Procedures
-            </div>
-            
-            <div class="procedure-item" id="step1">
-                <span class="procedure-text">1) Office List</span>
-                <span class="status-badge status-ready">Ready</span>
-            </div>
-            
-            <div class="procedure-item" id="step2">
-                <span class="procedure-text">2) Module List</span>
-                <span class="status-badge status-ready">Ready</span>
-            </div>
-            
-            <div class="procedure-item" id="step3">
-                <span class="procedure-text">3) Role List based on Module</span>
-                <span class="status-badge status-ready">Ready</span>
-            </div>
-            
-            <div class="procedure-item" id="step4">
-                <span class="procedure-text">4) Create User in Azure</span>
-                <span class="status-badge status-mock">Mock</span>
-            </div>
-            
-            <div class="procedure-item" id="step5">
-                <span class="procedure-text">5) Mapping Module in Azure</span>
-                <span class="status-badge status-mock">Mock</span>
-            </div>
-            
-            <div class="procedure-item" id="step6">
-                <span class="procedure-text">6) Creating in SCM/BIZ/FITGAP</span>
-                <span class="status-badge status-away">Away</span>
-            </div>
-            
-            <div class="procedure-item" id="step7">
-                <span class="procedure-text">7) Mapping Module in SCM/BIZ/FITGAP</span>
-                <span class="status-badge status-away">Away</span>
-            </div>
-            
-            <div class="procedure-item" id="step8">
-                <span class="procedure-text">8) Delete User from Azure</span>
-                <span class="status-badge status-mock">Mock</span>
-            </div>
-            
-            <div class="procedure-item" id="step9">
-                <span class="procedure-text">9) Delete from SCM/BIZ/FITGAP</span>
-                <span class="status-badge status-away">Away</span>
-            </div>
-        </div>
-
         <!-- User Form Panel -->
         <div class="user-form-panel">
             <form id="userForm" method="POST" action="{{ route('users.store') }}">
                 @csrf
                 
-                <!-- Finding Server/Edit Server Section -->
+                <!-- User Information Section -->
                 <div class="form-section">
                     <div class="section-title">
                         <i class="fas fa-server"></i>
@@ -433,25 +322,39 @@
                     
                     <div class="modules-grid">
                         @foreach($modules as $module)
-                            <div class="module-card" onclick="toggleModule('{{ $module->code }}')">
+                            <div class="module-card" data-module-code="{{ $module->code }}">
                                 <div class="module-header">
                                     <input type="checkbox" 
                                            class="module-checkbox" 
                                            id="{{ $module->code }}Module"
                                            name="modules[{{ $module->code }}][enabled]"
-                                           value="1">
+                                           value="1"
+                                           onchange="toggleModule('{{ $module->code }}')"
+                                           {{ old("modules.{$module->code}.enabled") ? 'checked' : '' }}>
                                     <span class="module-name">{{ $module->name }}</span>
                                 </div>
-                                <select class="role-dropdown" 
-                                        id="{{ $module->code }}Role" 
-                                        name="modules[{{ $module->code }}][role_id]"
-                                        disabled
-                                        onchange="updatePermissions()">
-                                    <option value="">Select Role</option>
+                                <div class="role-group" id="{{ $module->code }}Roles">
+                                    <label>
+                                        <input type="checkbox" 
+                                               value="all" 
+                                               onchange="toggleAllRoles(this, '{{ $module->code }}')"
+                                               {{ count(old("modules.{$module->code}.role_ids", [])) == $module->roles->count() ? 'checked' : '' }}
+                                               {{ old("modules.{$module->code}.enabled") ? '' : 'disabled' }}>
+                                        All Roles
+                                    </label>
                                     @foreach($module->roles as $role)
-                                        <option value="{{ $role->id }}">{{ $role->name }}</option>
+                                        <label>
+                                            <input type="checkbox" 
+                                                   name="modules[{{ $module->code }}][role_ids][]" 
+                                                   value="{{ $role->id }}"
+                                                   onchange="validateRoles(this, '{{ $module->code }}')"
+                                                   {{ in_array($role->id, old("modules.{$module->code}.role_ids", [])) ? 'checked' : '' }}
+                                                   {{ count(old("modules.{$module->code}.role_ids", [])) == $module->roles->count() ? 'disabled' : '' }}
+                                                   {{ old("modules.{$module->code}.enabled") ? '' : 'disabled' }}>
+                                            {{ $role->name }}
+                                        </label>
                                     @endforeach
-                                </select>
+                                </div>
                             </div>
                         @endforeach
                     </div>
@@ -490,44 +393,84 @@
     const rolePermissions = @json($rolePermissions ?? []);
 
     document.addEventListener('DOMContentLoaded', function() {
+        // Initialize module states
+        Object.keys(moduleData).forEach(moduleCode => {
+            const checkbox = document.getElementById(moduleCode + 'Module');
+            const roleGroup = document.getElementById(moduleCode + 'Roles');
+            const moduleCard = checkbox.closest('.module-card');
+            const allCheckbox = roleGroup.querySelector('input[value="all"]');
+            const individualCheckboxes = roleGroup.querySelectorAll('input[name^="modules["]:not([value="all"])');
+
+            if (checkbox.checked) {
+                moduleCard.classList.add('active');
+                allCheckbox.disabled = false;
+                individualCheckboxes.forEach(cb => cb.disabled = allCheckbox.checked);
+            }
+        });
+        
         updatePermissions();
     });
 
-    function toggleModule(moduleName) {
-        const checkbox = document.getElementById(moduleName + 'Module');
-        const roleDropdown = document.getElementById(moduleName + 'Role');
+    function toggleModule(moduleCode) {
+        const checkbox = document.getElementById(moduleCode + 'Module');
+        const roleGroup = document.getElementById(moduleCode + 'Roles');
         const moduleCard = checkbox.closest('.module-card');
-        
-        checkbox.checked = !checkbox.checked;
+        const allCheckbox = roleGroup.querySelector('input[value="all"]');
+        const individualCheckboxes = roleGroup.querySelectorAll('input[name^="modules["]:not([value="all"])');
         
         if (checkbox.checked) {
-            roleDropdown.disabled = false;
             moduleCard.classList.add('active');
-            updateProcedureStatus('step3', 'processing');
+            allCheckbox.disabled = false;
+            individualCheckboxes.forEach(cb => {
+                cb.disabled = false;
+                // If no roles selected, perhaps select all by default or leave empty
+            });
+            if (individualCheckboxes.length > 0 && Array.from(individualCheckboxes).every(cb => !cb.checked) && !allCheckbox.checked) {
+                allCheckbox.checked = true;
+                toggleAllRoles(allCheckbox, moduleCode);
+            }
+        } else {
+            moduleCard.classList.remove('active');
+            allCheckbox.checked = false;
+            allCheckbox.disabled = true;
+            individualCheckboxes.forEach(cb => {
+                cb.checked = false;
+                cb.disabled = true;
+            });
         }
+        
+        updatePermissions(moduleCode);
     }
 
-    function updateProcedureStatus(stepId, status) {
-        const step = document.getElementById(stepId);
-        if (step) {
-            const badge = step.querySelector('.status-badge');
-            badge.className = `status-badge status-${status}`;
-            
-            switch(status) {
-                case 'ready':
-                    badge.textContent = 'Ready';
-                    break;
-                case 'processing':
-                    badge.textContent = 'Processing';
-                    break;
-                case 'complete':
-                    badge.textContent = 'Complete';
-                    break;
-                case 'error':
-                    badge.textContent = 'Error';
-                    break;
-            }
+    function toggleAllRoles(allCheckbox, moduleCode) {
+        const roleGroup = document.getElementById(moduleCode + 'Roles');
+        const individualCheckboxes = roleGroup.querySelectorAll('input[name^="modules["]:not([value="all"])');
+        
+        individualCheckboxes.forEach(cb => {
+            cb.checked = allCheckbox.checked;
+            cb.disabled = allCheckbox.checked;
+        });
+        
+        updatePermissions(moduleCode);
+    }
+
+    function validateRoles(checkbox, moduleCode) {
+        const roleGroup = document.getElementById(moduleCode + 'Roles');
+        const allCheckbox = roleGroup.querySelector('input[value="all"]');
+        const individualCheckboxes = roleGroup.querySelectorAll('input[name^="modules["]:not([value="all"])');
+        
+        if (checkbox.checked) {
+            allCheckbox.checked = false;
+            individualCheckboxes.forEach(cb => cb.disabled = false);
         }
+        
+        const anyIndividualChecked = Array.from(individualCheckboxes).some(cb => cb.checked);
+        if (!anyIndividualChecked) {
+            allCheckbox.checked = true;
+            toggleAllRoles(allCheckbox, moduleCode);
+        }
+        
+        updatePermissions(moduleCode);
     }
 
     function loadCompaniesByLocation() {
@@ -541,7 +484,6 @@
         }
         
         showLoading();
-        updateProcedureStatus('step1', 'processing');
         
         axios.get(`/api/companies/${location}`)
             .then(response => {
@@ -549,13 +491,11 @@
                 response.data.forEach(company => {
                     companySelect.innerHTML += `<option value="${company.id}">${company.name}</option>`;
                 });
-                updateProcedureStatus('step1', 'complete');
                 hideLoading();
             })
             .catch(error => {
                 console.error('Error loading companies:', error);
                 showAlert('error', 'Error', 'Failed to load companies');
-                updateProcedureStatus('step1', 'error');
                 hideLoading();
             });
     }
@@ -570,11 +510,54 @@
         );
     }
 
-    // Form submission with Azure provisioning simulation
+    function updatePermissions(changedModule = null) {
+        const permissionTags = document.getElementById('permissionTags');
+        const permissions = [];
+        
+        Object.keys(moduleData).forEach(moduleCode => {
+            const checkbox = document.getElementById(moduleCode + 'Module');
+            const roleGroup = document.getElementById(moduleCode + 'Roles');
+            
+            if (checkbox && roleGroup && checkbox.checked) {
+                const selectedCheckboxes = roleGroup.querySelectorAll('input[name^="modules["]:checked:not([value="all"])');
+                selectedCheckboxes.forEach(option => {
+                    const roleId = option.value;
+                    const roleName = option.closest('label').textContent.trim();
+                    permissions.push(`${moduleData[moduleCode].name}: ${roleName}`);
+                    
+                    if (changedModule === moduleCode) {
+                        const permissionsForRole = rolePermissions[roleId] || [];
+                        permissionsForRole.forEach(permission => {
+                            permissions.push(`${moduleData[moduleCode].name}: ${permission}`);
+                        });
+                    }
+                });
+            }
+        });
+        
+        if (permissions.length === 0) {
+            permissionTags.innerHTML = '<span class="permission-tag">No permissions selected</span>';
+        } else {
+            permissionTags.innerHTML = permissions.map(permission => 
+                `<span class="permission-tag">${permission}</span>`
+            ).join('');
+        }
+    }
+
+    // Form submission
     document.getElementById('userForm').addEventListener('submit', function(e) {
         e.preventDefault();
         
         const formData = new FormData(this);
+        
+        // Handle 'all' checkboxes before submission
+        Object.keys(moduleData).forEach(moduleCode => {
+            const roleGroup = document.getElementById(moduleCode + 'Roles');
+            const allCheckbox = roleGroup.querySelector('input[value="all"]');
+            if (allCheckbox && allCheckbox.checked) {
+                allCheckbox.checked = false; // Deselect 'all'
+            }
+        });
         
         // Validate form
         if (!validateForm()) {
@@ -583,8 +566,47 @@
         
         showLoading();
         
-        // Simulate procedure steps
-        simulateProvisioningProcess(formData);
+        // Submit to Laravel backend
+        axios.post('{{ route("users.store") }}', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            }
+        })
+        .then(response => {
+            if (response.data.success) {
+                showAlert('success', 'Success', 'User created successfully!');
+                setTimeout(() => {
+                    window.location.href = '{{ route("dashboard.index") }}';
+                }, 2000);
+            } else {
+                throw new Error(response.data.message || 'Failed to create user');
+            }
+        })
+        .catch(error => {
+            console.error('Error creating user:', error);
+            
+            let errorMessage = 'Failed to create user';
+            if (error.response && error.response.data) {
+                if (error.response.data.errors) {
+                    const errors = error.response.data.errors;
+                    errorMessage = Object.values(errors).flat().join('<br>');
+                    
+                    Object.keys(errors).forEach(field => {
+                        const element = document.getElementById(field);
+                        if (element) {
+                            element.classList.add('is-invalid');
+                        }
+                    });
+                } else if (error.response.data.message) {
+                    errorMessage = error.response.data.message;
+                }
+            }
+            
+            showAlert('error', 'Error', errorMessage);
+        })
+        .finally(() => {
+            hideLoading();
+        });
     });
 
     function validateForm() {
@@ -601,120 +623,57 @@
             }
         });
         
-        // Check if at least one module is selected
-        const modules = ['office', 'scm', 'biz', 'fitgap'];
-        const hasModules = modules.some(module => {
-            const checkbox = document.getElementById(module + 'Module');
-            return checkbox && checkbox.checked;
+        // Check modules
+        let hasValidModule = false;
+        Object.keys(moduleData).forEach(moduleCode => {
+            const checkbox = document.getElementById(moduleCode + 'Module');
+            const roleGroup = document.getElementById(moduleCode + 'Roles');
+            const selectedRoles = roleGroup.querySelectorAll('input[name^="modules["]:checked:not([value="all"])').length;
+            if (checkbox.checked && selectedRoles > 0) {
+                hasValidModule = true;
+            }
         });
         
-        if (!hasModules) {
-            showAlert('warning', 'Warning', 'Please select at least one module');
+        if (!hasValidModule) {
+            showAlert('warning', 'Warning', 'Please select at least one module with at least one role');
             isValid = false;
         }
         
         return isValid;
     }
 
-    async function simulateProvisioningProcess(formData) {
-        try {
-            // Step 4: Create User in Azure
-            updateProcedureStatus('step4', 'processing');
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            updateProcedureStatus('step4', 'complete');
-            
-            // Step 5: Mapping Module in Azure
-            updateProcedureStatus('step5', 'processing');
-            await new Promise(resolve => setTimeout(resolve, 800));
-            updateProcedureStatus('step5', 'complete');
-            
-            // Submit to Laravel backend
-            const response = await axios.post('{{ route("users.store") }}', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data'
-                }
-            });
-            
-            if (response.data.success) {
-                showAlert('success', 'Success', 'User created successfully!');
-                setTimeout(() => {
-                    window.location.href = '{{ route("dashboard.index") }}';
-                }, 2000);
-            } else {
-                throw new Error(response.data.message || 'Failed to create user');
-            }
-            
-        } catch (error) {
-            console.error('Error creating user:', error);
-            
-            // Update failed steps
-            updateProcedureStatus('step4', 'error');
-            updateProcedureStatus('step5', 'error');
-            
-            let errorMessage = 'Failed to create user';
-            if (error.response && error.response.data) {
-                if (error.response.data.errors) {
-                    // Handle validation errors
-                    const errors = error.response.data.errors;
-                    errorMessage = Object.values(errors).flat().join('<br>');
-                    
-                    // Highlight invalid fields
-                    Object.keys(errors).forEach(field => {
-                        const element = document.getElementById(field);
-                        if (element) {
-                            element.classList.add('is-invalid');
-                        }
-                    });
-                } else if (error.response.data.message) {
-                    errorMessage = error.response.data.message;
-                }
-            }
-            
-            Swal.fire({
-                icon: 'error',
-                title: 'Error',
-                html: errorMessage
-            });
-        } finally {
-            hideLoading();
-        }
+    // Utility functions (assumed to be defined in layouts.app or elsewhere)
+    function showLoading() {
+        // Implementation depends on your app's loading indicator
+        console.log('Loading...');
     }
 
-    // Add event listeners for role dropdowns
-    @foreach($modules as $module)
-        document.getElementById('{{ $module->code }}Role').addEventListener('change', updatePermissions);
-    @endforeach
-</script>
-@endsection2', 'processing');
-        } else {
-            roleDropdown.disabled = true;
-            roleDropdown.value = '';
-            moduleCard.classList.remove('active');
-        }
-        
-        updatePermissions();
+    function hideLoading() {
+        // Implementation depends on your app's loading indicator
+        console.log('Loading stopped.');
     }
 
-    function updatePermissions() {
-        const permissionTags = document.getElementById('permissionTags');
-        const modules = ['office', 'scm', 'biz', 'fitgap'];
-        const permissions = [];
-        
-        modules.forEach(module => {
-            const checkbox = document.getElementById(module + 'Module');
-            const roleSelect = document.getElementById(module + 'Role');
-            
-            if (checkbox && roleSelect && checkbox.checked && roleSelect.value) {
-                const roleId = roleSelect.value;
-                const roleName = roleSelect.options[roleSelect.selectedIndex].text;
-                permissions.push(`${module.toUpperCase()}: ${roleName}`);
+    function showAlert(type, title, message) {
+        Swal.fire({
+            icon: type,
+            title: title,
+            html: message
+        });
+    }
+
+    function confirmAction(title, message, callback) {
+        Swal.fire({
+            title: title,
+            text: message,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Yes',
+            cancelButtonText: 'No'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                callback();
             }
         });
-        
-        if (permissions.length === 0) {
-            permissionTags.innerHTML = '<span class="permission-tag">No permissions selected</span>';
-        } else {
-            permissionTags.innerHTML = permissions.map(permission => 
-                `<span class="permission-tag">${permission}</span>`
-            ).join('');
-            updateProcedureStatus('step
+    }
+</script>
+@endsection
