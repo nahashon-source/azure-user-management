@@ -6,18 +6,19 @@ use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\AzureAuthController;
 use App\Http\Controllers\ReportController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\CompanyController;
 
 // Public routes - no authentication required
 Route::get('/', function () {
     return redirect('/dashboard');
 });
 
-// Dashboard routes - remove middleware
+// Dashboard routes
 Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard.index');
 Route::get('/dashboard/stats', [DashboardController::class, 'getStats'])->name('dashboard.stats');
 Route::get('/dashboard/reports', [DashboardController::class, 'reports'])->name('dashboard.reports');
 
-// User Management routes - remove middleware
+// User Management routes
 Route::prefix('users')->name('users.')->group(function () {
     Route::get('/', [UserManagementController::class, 'index'])->name('index');
     Route::get('/create', [UserManagementController::class, 'create'])->name('create');
@@ -27,9 +28,10 @@ Route::prefix('users')->name('users.')->group(function () {
     Route::put('/{user}', [UserManagementController::class, 'update'])->name('update');
     Route::delete('/{user}', [UserManagementController::class, 'destroy'])->name('destroy');
     Route::post('/{user}/enable', [UserManagementController::class, 'enable'])->name('enable');
+    Route::post('/{user}/retry-modules', [UserManagementController::class, 'retryModuleAssignments'])->name('retry-modules');
 });
 
-// Module Management routes - remove middleware
+// Module Management routes
 Route::prefix('modules')->name('modules.')->group(function () {
     Route::get('/', function() { 
         return view('modules.index'); 
@@ -39,7 +41,7 @@ Route::prefix('modules')->name('modules.')->group(function () {
     })->name('assign');
 });
 
-// Reports routes - remove middleware
+// Reports routes
 Route::prefix('reports')->name('reports.')->group(function () {
     Route::get('/', [ReportController::class, 'index'])->name('index');
     Route::get('/users', [ReportController::class, 'users'])->name('users');
@@ -47,14 +49,17 @@ Route::prefix('reports')->name('reports.')->group(function () {
     Route::get('/provisioning', [ReportController::class, 'provisioning'])->name('provisioning');
 });
 
-// Azure Authentication routes - remove middleware
+// Azure Authentication routes
 Route::prefix('azure')->name('azure.')->group(function () {
     Route::get('/auth', [AzureAuthController::class, 'redirectToProvider'])->name('auth');
     Route::get('/callback', [AzureAuthController::class, 'handleProviderCallback'])->name('callback');
     Route::post('/test-connection', [AzureAuthController::class, 'testConnection'])->name('test');
 });
 
-// Fallback for undefined routes
+// API routes
+Route::get('/api/companies/{location}', [CompanyController::class, 'getByLocation'])->name('api.companies.by-location');
+
+// Fallback for undefined routes - MUST BE LAST
 Route::fallback(function () {
     return redirect('/dashboard');
 });

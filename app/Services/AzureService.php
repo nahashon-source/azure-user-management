@@ -27,7 +27,7 @@ class AzureService
     /**
      * Get Azure AD access token (with caching)
      */
-    private function getAccessToken(): string
+    public function getAccessToken(): string
     {
         $cacheKey = 'azure_access_token';
         
@@ -294,6 +294,33 @@ class AzureService
             return null;
         }
     }
+
+
+    /**
+ * Find user by User Principal Name (email)
+ */
+public function findUserByUPN(string $upn): ?array
+{
+    try {
+        $token = $this->getAccessToken();
+
+        $response = Http::withToken($token)
+            ->get("{$this->graphBaseUrl}/users/{$upn}");
+
+        if ($response->failed()) {
+            return null;
+        }
+
+        return $response->json();
+
+    } catch (Exception $e) {
+        Log::channel('azure')->error('Azure find user by UPN failed', [
+            'upn' => $upn,
+            'error' => $e->getMessage()
+        ]);
+        return null;
+    }
+}
 
     /**
      * Revoke all user sessions (sign out from all devices)

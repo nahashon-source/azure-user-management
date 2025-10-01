@@ -1,0 +1,58 @@
+[90m= [39m[
+    "[34msuccess[39m" => [36mtrue[39m,
+    "[34muser[39m" => [34;4mApp\Models\User[39;24m {#6389
+      [34mid[39m: [35m3[39m,
+      [34mname[39m: "[32mJane Smith[39m",
+      [34memail[39m: "[32mjane.smith@beighton.com[39m",
+      [34memail_verified_at[39m: [36mnull[39m,
+      #[33mpassword[39m: "[32m$2y$12$J.KilpGDzoikM5TvUMeSxezthearOY//jqrtxxTnBUCT5.BcxvEI6[39m",
+      #[33mremember_token[39m: [36mnull[39m,
+      [34memployee_id[39m: "[32mEMP003[39m",
+      [34mphone[39m: "[32m+254700000003[39m",
+      [34mlocation[39m: "[32mkenya[39m",
+      [34mcompany_id[39m: [35m1[39m,
+      [34mstatus[39m: "[32mactive[39m",
+      [34mcreated_at[39m: "[32m2025-09-25 11:47:09[39m",
+      [34mupdated_at[39m: "[32m2025-09-30 19:12:20[39m",
+      [34mazure_id[39m: "[32m62a51184-f9e1-47b5-b9a6-0ab1b2bd715b[39m",
+      [34mazure_upn[39m: "[32mjane.smith@freight-in-time.com[39m",
+      [34mazure_display_name[39m: "[32mJane Smith[39m",
+      [34mjob_title[39m: [36mnull[39m,
+      [34mdepartment[39m: [36mnull[39m,
+      [34mcompany[39m: [34;4mApp\Models\Company[39;24m {#6437
+        [34mid[39m: [35m1[39m,
+        [34mname[39m: "[32mBeiGhton Kenya Ltd[39m",
+        [34mlocation[39m: "[32mkenya[39m",
+        [34mcreated_at[39m: "[32m2025-09-25 11:47:07[39m",
+        [34mupdated_at[39m: "[32m2025-09-25 11:47:07[39m",
+      },
+    },
+    "[34mazure[39m" => [
+      "[34msuccess[39m" => [36mtrue[39m,
+      "[34mazure_id[39m" => "[32m62a51184-f9e1-47b5-b9a6-0ab1b2bd715b[39m",
+      "[34mazure_upn[39m" => "[32mjane.smith@freight-in-time.com[39m",
+    ],
+    "[34mmodules[39m" => [
+      [34m2[39m => [
+        "[34msuccess[39m" => [36mtrue[39m,
+        "[34mazure_group[39m" => [
+          "[34msuccess[39m" => [36mfalse[39m,
+          "[34mskipped[39m" => [36mtrue[39m,
+        ],
+        "[34mazure_app_role[39m" => [
+          "[34msuccess[39m" => [36mfalse[39m,
+          "[34mskipped[39m" => [36mtrue[39m,
+        ],
+        "[34mexternal_api[39m" => [
+          "[34msuccess[39m" => [36mfalse[39m,
+          "[34mskipped[39m" => [36mtrue[39m,
+        ],
+        "[34merrors[39m" => [],
+        "[34mmodule_code[39m" => "[32mscm[39m",
+        "[34mmodule_name[39m" => "[32mSupply Chain Management[39m",
+      ],
+    ],
+    "[34merrors[39m" => [],
+    "[34mpartial_failure[39m" => [36mfalse[39m,
+  ]
+

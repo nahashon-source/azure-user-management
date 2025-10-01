@@ -10,7 +10,7 @@ class CompanyController extends Controller
     /**
      * Get companies by location
      */
-    public function getByLocation(string $location)
+public function getByLocation(string $location)
     {
         $companies = Company::where('location', $location)
             ->select('id', 'name', 'location')

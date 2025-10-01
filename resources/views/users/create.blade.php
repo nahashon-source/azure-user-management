@@ -281,7 +281,7 @@
                                     onchange="loadCompaniesByLocation()">
                                 <option value="">Select Location</option>
                                 @foreach($locations as $location)
-                                    <option value="{{ $location->code }}" 
+                                    <option value="{{ strtolower($location->name) }}" 
                                             {{ old('location') == $location->code ? 'selected' : '' }}>
                                         {{ $location->name }}
                                     </option>
@@ -307,6 +307,30 @@
                                 @endforeach
                             </select>
                             @error('company_id')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="form-group">
+                            <label for="job_title"><i class="fas fa-briefcase"></i> Job Title</label>
+                            <input type="text" 
+                                   id="job_title" 
+                                   name="job_title" 
+                                   value="{{ old('job_title') }}" 
+                                   class="@error('job_title') is-invalid @enderror">
+                            @error('job_title')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+
+                        <div class="form-group">
+                            <label for="department"><i class="fas fa-building"></i> Department</label>
+                            <input type="text" 
+                                   id="department" 
+                                   name="department" 
+                                   value="{{ old('department') }}" 
+                                   class="@error('department') is-invalid @enderror">
+                            @error('department')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
                         </div>
@@ -472,33 +496,57 @@
         
         updatePermissions(moduleCode);
     }
-
-    function loadCompaniesByLocation() {
-        const locationSelect = document.getElementById('location');
-        const companySelect = document.getElementById('company_id');
-        const location = locationSelect.value;
-        
-        if (!location) {
-            companySelect.innerHTML = '<option value="">Select Company</option>';
-            return;
-        }
-        
-        showLoading();
-        
-        axios.get(`/api/companies/${location}`)
-            .then(response => {
-                companySelect.innerHTML = '<option value="">Select Company</option>';
-                response.data.forEach(company => {
-                    companySelect.innerHTML += `<option value="${company.id}">${company.name}</option>`;
-                });
-                hideLoading();
-            })
-            .catch(error => {
-                console.error('Error loading companies:', error);
-                showAlert('error', 'Error', 'Failed to load companies');
-                hideLoading();
-            });
+function loadCompaniesByLocation() {
+    const locationSelect = document.getElementById('location');
+    const companySelect = document.getElementById('company_id');
+    const location = locationSelect.value;
+    
+    if (!location) {
+        companySelect.innerHTML = '<option value="">Select Company</option>';
+        return;
     }
+    
+    // Show loading state
+    companySelect.innerHTML = '<option value="">Loading companies...</option>';
+    companySelect.disabled = true;
+    
+    // Use fetch instead of axios (more reliable, no dependencies)
+    fetch(`/api/companies/${location}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(companies => {
+            companySelect.innerHTML = '<option value="">Select Company</option>';
+            
+            if (companies.length === 0) {
+                companySelect.innerHTML += '<option value="">No companies found</option>';
+            } else {
+                companies.forEach(company => {
+                    const option = document.createElement('option');
+                    option.value = company.id;
+                    option.textContent = company.name;
+                    companySelect.appendChild(option);
+                });
+            }
+            
+            companySelect.disabled = false;
+        })
+        .catch(error => {
+            console.error('Error loading companies:', error);
+            companySelect.innerHTML = '<option value="">Failed to load companies</option>';
+            companySelect.disabled = false;
+            
+            // Show alert if function exists
+            if (typeof showAlert === 'function') {
+                showAlert('error', 'Error', 'Failed to load companies. Please try again.');
+            } else {
+                alert('Failed to load companies. Please try again.');
+            }
+        });
+}
 
     function cancelForm() {
         confirmAction(

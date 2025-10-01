@@ -12,11 +12,23 @@ use App\Models\Module;
 use App\Models\Role;
 use App\Http\Requests\StoreUserRequest;
 use App\Http\Requests\UpdateUserRequest;
-use Illuminate\Support\Facades\Hash;
+use App\Services\UserProvisioningService;
+use App\Services\ModuleAssignmentService;
 use Illuminate\Support\Facades\DB;
 
 class UserManagementController extends Controller
 {
+    private UserProvisioningService $provisioningService;
+    private ModuleAssignmentService $moduleAssignmentService;
+
+    public function __construct(
+        UserProvisioningService $provisioningService,
+        ModuleAssignmentService $moduleAssignmentService
+    ) {
+        $this->provisioningService = $provisioningService;
+        $this->moduleAssignmentService = $moduleAssignmentService;
+    }
+
     /**
      * Display a listing of users
      */
@@ -43,68 +55,129 @@ class UserManagementController extends Controller
     }
 
     /**
-     * Store a newly created user
+     * Store a newly created user (with Azure provisioning)
      */
-    public function store(StoreUserRequest $request)
-    {
-        try {
-            DB::beginTransaction();
+   public function store(StoreUserRequest $request)
+{
+    try {
+        // Prepare user data
+        $userData = [
+            'name' => $request->name,
+            'email' => $request->email,
+            'employee_id' => $request->employee_id,
+            'phone' => $request->phone,
+            'location' => $request->location, // ADDED: Missing location field
+            'job_title' => $request->job_title,
+            'department' => $request->department,
+            'company_id' => $request->company_id,
+        ];
 
-            // Create the user
-            $user = User::create([
-                'name' => $request->name,
-                'email' => $request->email,
-                'employee_id' => $request->employee_id,
-                'phone' => $request->phone,
-                'location' => $request->location,
-                'company_id' => $request->company_id,
-                'status' => 'pending',
-                'password' => Hash::make('temp_password_123'),
-            ]);
-
-            // Handle module assignments (new format: [location, module_id, role_id])
-            if ($request->has('modules')) {
-                foreach ($request->modules as $moduleData) {
-                    if (!empty($moduleData['module_id']) && !empty($moduleData['role_id'])) {
-                        $user->modules()->attach($moduleData['module_id'], [
-                            'role_id' => $moduleData['role_id'],
-                            'location' => $moduleData['location'] ?? null,
-                            'assigned_at' => now(),
-                        ]);
+        // Transform module assignments from form structure to service structure
+        $moduleAssignments = [];
+        if ($request->has('modules')) {
+            foreach ($request->modules as $moduleCode => $moduleData) {
+                // Check if module is enabled
+                if (!empty($moduleData['enabled'])) {
+                    // Get module by code
+                    $module = Module::where('code', $moduleCode)->first();
+                    
+                    if ($module && !empty($moduleData['role_ids'])) {
+                        // Create assignment for each selected role
+                        foreach ($moduleData['role_ids'] as $roleId) {
+                            $moduleAssignments[] = [
+                                'module_id' => $module->id,
+                                'role_id' => $roleId,
+                                'location' => $request->location, // Use user's location
+                            ];
+                        }
                     }
                 }
             }
+        }
 
-            $this->logUserActivity($user, 'created', 'User account created');
-            DB::commit();
+        // Validate that at least one module is assigned
+        if (empty($moduleAssignments)) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'At least one module with a role must be assigned'
+                ], 422);
+            }
+
+            return redirect()->back()
+                ->withInput()
+                ->withErrors(['modules' => 'At least one module with a role must be assigned']);
+        }
+
+        // Provision user through service
+        $result = $this->provisioningService->provisionUser($userData, $moduleAssignments);
+
+        if ($result['success']) {
+            $user = $result['user'];
+            
+            // Log audit trail
+            $this->logUserActivity($user, 'created', 'User account created and provisioned');
+
+            // Prepare success message
+            $message = 'User created successfully!';
+            
+            if ($result['partial_failure']) {
+                $failedCount = count(array_filter($result['modules'], fn($m) => !$m['success']));
+                $message .= " Warning: {$failedCount} module assignment(s) failed.";
+            }
 
             if ($request->expectsJson()) {
                 return response()->json([
                     'success' => true,
-                    'message' => 'User created successfully',
-                    'user' => $user->load(['company', 'modules'])
+                    'message' => $message,
+                    'user' => $user->load(['company', 'modules.roles']),
+                    'provisioning_details' => [
+                        'azure' => $result['azure'],
+                        'modules' => $result['modules'],
+                        'partial_failure' => $result['partial_failure']
+                    ]
                 ]);
             }
 
+            $flashType = $result['partial_failure'] ? 'warning' : 'success';
             return redirect()->route('dashboard.index')
-                ->with('success', 'User created successfully!');
+                ->with($flashType, $message);
 
-        } catch (\Exception $e) {
-            DB::rollback();
+        } else {
+            // Complete failure
+            $errorMessage = 'Failed to create user: ' . implode(', ', $result['errors']);
 
             if ($request->expectsJson()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Failed to create user: ' . $e->getMessage()
+                    'message' => $errorMessage,
+                    'errors' => $result['errors']
                 ], 500);
             }
 
             return redirect()->back()
                 ->withInput()
-                ->withErrors(['error' => 'Failed to create user: ' . $e->getMessage()]);
+                ->withErrors(['error' => $errorMessage]);
         }
-    }
 
+    } catch (\Exception $e) {
+        Log::error('User creation failed', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to create user: ' . $e->getMessage()
+            ], 500);
+        }
+
+        return redirect()->back()
+            ->withInput()
+            ->withErrors(['error' => 'Failed to create user: ' . $e->getMessage()]);
+    }
+}
     /**
      * Display the specified user
      */
@@ -112,7 +185,10 @@ class UserManagementController extends Controller
     {
         $user->load(['company', 'modules.roles', 'roles']);
         
-        return view('users.show', compact('user'));
+        // Get provisioning status
+        $provisioningStatus = $this->provisioningService->getProvisioningStatus($user);
+        
+        return view('users.show', compact('user', 'provisioningStatus'));
     }
 
     /**
@@ -137,51 +213,105 @@ class UserManagementController extends Controller
     public function update(UpdateUserRequest $request, User $user)
     {
         try {
-            DB::beginTransaction();
-
-            // Update user basic information
-            $user->update([
+            // Prepare update data
+            $updateData = [
                 'name' => $request->name,
                 'email' => $request->email,
                 'employee_id' => $request->employee_id,
                 'phone' => $request->phone,
-                'location' => $request->location,
+                'job_title' => $request->job_title,
+                'department' => $request->department,
                 'company_id' => $request->company_id,
-            ]);
+            ];
 
-            // Clear old module assignments
-            $user->modules()->detach();
+            // Update basic user information
+            $result = $this->provisioningService->updateUser($user, $updateData);
 
-            // Reassign new modules
+            // Handle module assignment changes
             if ($request->has('modules')) {
-                foreach ($request->modules as $moduleData) {
-                    if (!empty($moduleData['module_id']) && !empty($moduleData['role_id'])) {
-                        $user->modules()->attach($moduleData['module_id'], [
-                            'role_id' => $moduleData['role_id'],
-                            'location' => $moduleData['location'] ?? null,
-                            'assigned_at' => now(),
-                        ]);
+                DB::beginTransaction();
+
+                try {
+                    // Get current module assignments
+                    $currentModules = $user->modules->pluck('id')->toArray();
+                    $newModules = collect($request->modules)
+                        ->pluck('module_id')
+                        ->filter()
+                        ->toArray();
+
+                    // Find modules to remove
+                    $modulesToRemove = array_diff($currentModules, $newModules);
+                    foreach ($modulesToRemove as $moduleId) {
+                        $module = Module::find($moduleId);
+                        if ($module) {
+                            $this->moduleAssignmentService->removeUserFromModule($user, $module);
+                        }
                     }
+
+                    // Find modules to add or update
+                    foreach ($request->modules as $moduleData) {
+                        if (!empty($moduleData['module_id']) && !empty($moduleData['role_id'])) {
+                            $module = Module::find($moduleData['module_id']);
+                            if ($module) {
+                                // Check if already assigned
+                                $existingAssignment = $user->modules()
+                                    ->where('module_id', $moduleData['module_id'])
+                                    ->first();
+
+                                if ($existingAssignment) {
+                                    // Update existing assignment if role or location changed
+                                    $pivot = $existingAssignment->pivot;
+                                    if ($pivot->role_id != $moduleData['role_id'] || 
+                                        $pivot->location != ($moduleData['location'] ?? null)) {
+                                        
+                                        // Re-assign with new details
+                                        $this->moduleAssignmentService->assignUserToModule(
+                                            $user,
+                                            $module,
+                                            $moduleData['role_id'],
+                                            $moduleData['location'] ?? null
+                                        );
+                                    }
+                                } else {
+                                    // New module assignment
+                                    $this->moduleAssignmentService->assignUserToModule(
+                                        $user,
+                                        $module,
+                                        $moduleData['role_id'],
+                                        $moduleData['location'] ?? null
+                                    );
+                                }
+                            }
+                        }
+                    }
+
+                    DB::commit();
+                } catch (\Exception $e) {
+                    DB::rollBack();
+                    throw $e;
                 }
             }
 
             $this->logUserActivity($user, 'updated', 'User account updated');
-            DB::commit();
+
+            $message = 'User updated successfully!';
+            if (!empty($result['errors'])) {
+                $message .= ' Some updates may have failed.';
+            }
 
             if ($request->expectsJson()) {
                 return response()->json([
                     'success' => true,
-                    'message' => 'User updated successfully',
-                    'user' => $user->load(['company', 'modules'])
+                    'message' => $message,
+                    'user' => $user->fresh()->load(['company', 'modules']),
+                    'update_details' => $result
                 ]);
             }
 
             return redirect()->route('dashboard.index')
-                ->with('success', 'User updated successfully!');
+                ->with('success', $message);
 
         } catch (\Exception $e) {
-            DB::rollback();
-
             if ($request->expectsJson()) {
                 return response()->json([
                     'success' => false,
@@ -196,22 +326,20 @@ class UserManagementController extends Controller
     }
 
     /**
-     * Remove (disable) the specified user
+     * Disable the specified user (local + Azure)
      */
     public function destroy(User $user)
     {
         try {
-            $user->update([
-                'status' => 'inactive',
-                'disabled_at' => now()
-            ]);
+            $result = $this->provisioningService->disableUser($user);
 
             $this->logUserActivity($user, 'disabled', 'User account disabled');
 
             if (request()->expectsJson()) {
                 return response()->json([
                     'success' => true,
-                    'message' => 'User disabled successfully'
+                    'message' => 'User disabled successfully',
+                    'details' => $result
                 ]);
             }
 
@@ -232,22 +360,20 @@ class UserManagementController extends Controller
     }
 
     /**
-     * Enable a disabled user
+     * Enable a disabled user (local + Azure)
      */
     public function enable(User $user)
     {
         try {
-            $user->update([
-                'status' => 'active',
-                'disabled_at' => null
-            ]);
+            $result = $this->provisioningService->enableUser($user);
 
             $this->logUserActivity($user, 'enabled', 'User account enabled');
 
             if (request()->expectsJson()) {
                 return response()->json([
                     'success' => true,
-                    'message' => 'User enabled successfully'
+                    'message' => 'User enabled successfully',
+                    'details' => $result
                 ]);
             }
 
@@ -264,6 +390,43 @@ class UserManagementController extends Controller
 
             return redirect()->back()
                 ->withErrors(['error' => 'Failed to enable user: ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Retry failed module assignments for a user
+     */
+    public function retryModuleAssignments(User $user)
+    {
+        try {
+            $results = $this->provisioningService->retryFailedModuleAssignments($user);
+
+            $successCount = count(array_filter($results, fn($r) => $r['success']));
+            $totalCount = count($results);
+
+            $message = "Retried {$totalCount} module(s): {$successCount} succeeded.";
+
+            if (request()->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => $message,
+                    'results' => $results
+                ]);
+            }
+
+            return redirect()->back()
+                ->with('success', $message);
+
+        } catch (\Exception $e) {
+            if (request()->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to retry module assignments: ' . $e->getMessage()
+                ], 500);
+            }
+
+            return redirect()->back()
+                ->withErrors(['error' => 'Failed to retry: ' . $e->getMessage()]);
         }
     }
 

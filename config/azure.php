@@ -53,6 +53,7 @@ return [
     'default_password_length' => 16,
     'force_password_change' => true,
     'account_enabled_default' => true,
+    'default_app_role_id' => env('AZURE_DEFAULT_APP_ROLE_ID', '00000000-0000-0000-0000-000000000000'),
 
     /*
     |--------------------------------------------------------------------------
