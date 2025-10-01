@@ -15,6 +15,8 @@ use App\Http\Requests\UpdateUserRequest;
 use App\Services\UserProvisioningService;
 use App\Services\ModuleAssignmentService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 
 class UserManagementController extends Controller
 {
@@ -74,26 +76,19 @@ class UserManagementController extends Controller
 
         // Transform module assignments from form structure to service structure
         $moduleAssignments = [];
-        if ($request->has('modules')) {
-            foreach ($request->modules as $moduleCode => $moduleData) {
-                // Check if module is enabled
-                if (!empty($moduleData['enabled'])) {
-                    // Get module by code
-                    $module = Module::where('code', $moduleCode)->first();
-                    
-                    if ($module && !empty($moduleData['role_ids'])) {
-                        // Create assignment for each selected role
-                        foreach ($moduleData['role_ids'] as $roleId) {
-                            $moduleAssignments[] = [
-                                'module_id' => $module->id,
-                                'role_id' => $roleId,
-                                'location' => $request->location, // Use user's location
-                            ];
-                        }
-                    }
-                }
-            }
+       $moduleAssignments = [];
+if ($request->has('modules')) {
+    foreach ($request->modules as $moduleData) {
+        // New structure expects: modules[0][module_id], modules[0][role_id]
+        if (!empty($moduleData['module_id']) && !empty($moduleData['role_id'])) {
+            $moduleAssignments[] = [
+                'module_id' => $moduleData['module_id'],
+                'role_id' => $moduleData['role_id'],
+                'location' => $moduleData['location'] ?? $request->location,
+            ];
         }
+    }
+}
 
         // Validate that at least one module is assigned
         if (empty($moduleAssignments)) {
@@ -438,7 +433,7 @@ class UserManagementController extends Controller
         $user->auditLogs()->create([
             'action' => $action,
             'description' => $description,
-            'performed_by' => auth()->id(),
+            'performed_by' => Auth::id(),
             'ip_address' => request()->ip(),
             'user_agent' => request()->userAgent(),
         ]);

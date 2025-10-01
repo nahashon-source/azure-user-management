@@ -73,76 +73,92 @@ class AzureService
      * @return array Azure user data
      */
     public function createUser(array $userData): array
-    {
-        try {
-            $token = $this->getAccessToken();
-            
-            // Generate both email formats
-            $primaryEmail = $this->generateEmail($userData['name'], $userData['employee_id']);
-            $mailNickname = $this->generateMailNickname($userData['name']);
-            
-            $azureUserData = [
-                'accountEnabled' => true,
-                'displayName' => $userData['name'],
-                'mailNickname' => $mailNickname,
-                'userPrincipalName' => $primaryEmail,
-                'passwordProfile' => [
-                    'forceChangePasswordNextSignIn' => true,
-                    'password' => $this->generateSecurePassword()
-                ],
-                'givenName' => $this->getFirstName($userData['name']),
-                'surname' => $this->getLastName($userData['name']),
-                'jobTitle' => $userData['job_title'] ?? 'Employee',
-                'department' => $userData['department'] ?? null,
-                'officeLocation' => $userData['location'] ?? null,
-                'mobilePhone' => $userData['phone'] ?? null,
-                'employeeId' => $userData['employee_id'],
-                'companyName' => $userData['company_name'] ?? null,
-            ];
-
-            Log::info('Creating Azure AD user', ['upn' => $primaryEmail]);
-
-            $response = Http::withToken($token)
-                ->post("{$this->graphBaseUrl}/users", $azureUserData);
-
-            if ($response->failed()) {
-                $error = $response->json();
-                Log::error('Azure user creation failed', [
-                    'status' => $response->status(),
-                    'error' => $error,
-                    'userData' => $azureUserData
-                ]);
-                
-                // Handle specific error cases
-                if ($response->status() === 400 && isset($error['error']['message'])) {
-                    throw new Exception('Azure AD Error: ' . $error['error']['message']);
-                }
-                
-                throw new Exception('Failed to create user in Azure AD');
-            }
-
-            $azureUser = $response->json();
-            
-            Log::info('Azure AD user created successfully', [
-                'azure_id' => $azureUser['id'],
-                'upn' => $azureUser['userPrincipalName']
+{
+    try {
+        $token = $this->getAccessToken();
+        
+        // Generate email formats
+        $primaryEmail = $this->generateEmail($userData['name'], $userData['employee_id']);
+        
+        // ✅ CHECK IF USER ALREADY EXISTS
+        $existingUser = $this->findUserByUPN($primaryEmail);
+        
+        if ($existingUser) {
+            Log::channel('azure')->warning('User already exists in Azure AD, returning existing user', [
+                'upn' => $primaryEmail,
+                'azure_id' => $existingUser['id']
             ]);
-
+            
             return [
-                'azure_id' => $azureUser['id'],
-                'azure_upn' => $azureUser['userPrincipalName'],
-                'azure_display_name' => $azureUser['displayName'],
+                'azure_id' => $existingUser['id'],
+                'azure_upn' => $existingUser['userPrincipalName'],
+                'azure_display_name' => $existingUser['displayName'],
             ];
-
-        } catch (Exception $e) {
-            Log::error('Azure user creation exception', [
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-            throw $e;
         }
-    }
+        
+        // Continue with user creation only if doesn't exist
+        $mailNickname = $this->generateMailNickname($userData['name']);
+        
+        $azureUserData = [
+            'accountEnabled' => true,
+            'displayName' => $userData['name'],
+            'mailNickname' => $mailNickname,
+            'userPrincipalName' => $primaryEmail,
+            'passwordProfile' => [
+                'forceChangePasswordNextSignIn' => true,
+                'password' => $this->generateSecurePassword()
+            ],
+            'givenName' => $this->getFirstName($userData['name']),
+            'surname' => $this->getLastName($userData['name']),
+            'jobTitle' => $userData['job_title'] ?? 'Employee',
+            'department' => $userData['department'] ?? null,
+            'officeLocation' => $userData['location'] ?? null,
+            'mobilePhone' => $userData['phone'] ?? null,
+            'employeeId' => $userData['employee_id'],
+            'companyName' => $userData['company_name'] ?? null,
+        ];
 
+        Log::channel('azure')->info('Creating new Azure AD user', ['upn' => $primaryEmail]);
+
+        $response = Http::withToken($token)
+            ->post("{$this->graphBaseUrl}/users", $azureUserData);
+
+        if ($response->failed()) {
+            $error = $response->json();
+            Log::channel('azure')->error('Azure user creation failed', [
+                'status' => $response->status(),
+                'error' => $error,
+                'userData' => $azureUserData
+            ]);
+            
+            if ($response->status() === 400 && isset($error['error']['message'])) {
+                throw new Exception('Azure AD Error: ' . $error['error']['message']);
+            }
+            
+            throw new Exception('Failed to create user in Azure AD');
+        }
+
+        $azureUser = $response->json();
+        
+        Log::channel('azure')->info('Azure AD user created successfully', [
+            'azure_id' => $azureUser['id'],
+            'upn' => $azureUser['userPrincipalName']
+        ]);
+
+        return [
+            'azure_id' => $azureUser['id'],
+            'azure_upn' => $azureUser['userPrincipalName'],
+            'azure_display_name' => $azureUser['displayName'],
+        ];
+
+    } catch (Exception $e) {
+        Log::channel('azure')->error('Azure user creation exception', [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        throw $e;
+    }
+}
     /**
      * Update user in Azure AD
      */

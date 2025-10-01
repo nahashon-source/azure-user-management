@@ -117,8 +117,8 @@
     }
 
     .module-card.active {
-        border-color: #27ae60;
-        background: linear-gradient(145deg, #e8f5e8, #f0f8f0);
+        border: 3px solid #27ae60 !important;
+        background: linear-gradient(145deg, #d4edda, #c3e6cb) !important;
     }
 
     .module-header {
@@ -151,6 +151,15 @@
         display: flex;
         align-items: center;
         gap: 5px;
+    }
+
+    .role-group input[type="checkbox"]:checked + * {
+        font-weight: bold;
+        color: #27ae60;
+    }
+
+    .role-group input[type="checkbox"]:checked {
+        transform: scale(1.2);
     }
 
     .permissions-display {
@@ -347,14 +356,11 @@
                     <div class="modules-grid">
                         @foreach($modules as $module)
                             <div class="module-card" data-module-code="{{ $module->code }}">
+                                <input type="hidden" 
+                                       name="modules[{{ $module->code }}][enabled]" 
+                                       value="{{ old("modules.{$module->code}.enabled") ? 1 : 0 }}" 
+                                       id="{{ $module->code }}Enabled">
                                 <div class="module-header">
-                                    <input type="checkbox" 
-                                           class="module-checkbox" 
-                                           id="{{ $module->code }}Module"
-                                           name="modules[{{ $module->code }}][enabled]"
-                                           value="1"
-                                           onchange="toggleModule('{{ $module->code }}')"
-                                           {{ old("modules.{$module->code}.enabled") ? 'checked' : '' }}>
                                     <span class="module-name">{{ $module->name }}</span>
                                 </div>
                                 <div class="role-group" id="{{ $module->code }}Roles">
@@ -362,8 +368,7 @@
                                         <input type="checkbox" 
                                                value="all" 
                                                onchange="toggleAllRoles(this, '{{ $module->code }}')"
-                                               {{ count(old("modules.{$module->code}.role_ids", [])) == $module->roles->count() ? 'checked' : '' }}
-                                               {{ old("modules.{$module->code}.enabled") ? '' : 'disabled' }}>
+                                               {{ count(old("modules.{$module->code}.role_ids", [])) == $module->roles->count() ? 'checked' : '' }}>
                                         All Roles
                                     </label>
                                     @foreach($module->roles as $role)
@@ -372,9 +377,7 @@
                                                    name="modules[{{ $module->code }}][role_ids][]" 
                                                    value="{{ $role->id }}"
                                                    onchange="validateRoles(this, '{{ $module->code }}')"
-                                                   {{ in_array($role->id, old("modules.{$module->code}.role_ids", [])) ? 'checked' : '' }}
-                                                   {{ count(old("modules.{$module->code}.role_ids", [])) == $module->roles->count() ? 'disabled' : '' }}
-                                                   {{ old("modules.{$module->code}.enabled") ? '' : 'disabled' }}>
+                                                   {{ in_array($role->id, old("modules.{$module->code}.role_ids", [])) ? 'checked' : '' }}>
                                             {{ $role->name }}
                                         </label>
                                     @endforeach
@@ -416,55 +419,33 @@
     const moduleData = @json($modules->keyBy('code'));
     const rolePermissions = @json($rolePermissions ?? []);
 
-    document.addEventListener('DOMContentLoaded', function() {
-        // Initialize module states
-        Object.keys(moduleData).forEach(moduleCode => {
-            const checkbox = document.getElementById(moduleCode + 'Module');
-            const roleGroup = document.getElementById(moduleCode + 'Roles');
-            const moduleCard = checkbox.closest('.module-card');
-            const allCheckbox = roleGroup.querySelector('input[value="all"]');
-            const individualCheckboxes = roleGroup.querySelectorAll('input[name^="modules["]:not([value="all"])');
-
-            if (checkbox.checked) {
+    function updateModuleEnabled(moduleCode) {
+        const roleGroup = document.getElementById(moduleCode + 'Roles');
+        if (!roleGroup) return;
+        const allCheckbox = roleGroup.querySelector('input[value="all"]');
+        const individualCheckboxes = roleGroup.querySelectorAll('input[name^="modules["]:not([value="all"])');
+        const anyChecked = (allCheckbox && allCheckbox.checked) || [...individualCheckboxes].some(cb => cb.checked);
+        const hiddenEnabled = document.getElementById(moduleCode + 'Enabled');
+        if (hiddenEnabled) {
+            hiddenEnabled.value = anyChecked ? '1' : '0';
+        }
+        const moduleCard = document.querySelector(`[data-module-code="${moduleCode}"]`);
+        if (moduleCard) {
+            if (anyChecked) {
                 moduleCard.classList.add('active');
-                allCheckbox.disabled = false;
-                individualCheckboxes.forEach(cb => cb.disabled = allCheckbox.checked);
+            } else {
+                moduleCard.classList.remove('active');
             }
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        Object.keys(moduleData).forEach(moduleCode => {
+            updateModuleEnabled(moduleCode);
         });
         
         updatePermissions();
     });
-
-    function toggleModule(moduleCode) {
-        const checkbox = document.getElementById(moduleCode + 'Module');
-        const roleGroup = document.getElementById(moduleCode + 'Roles');
-        const moduleCard = checkbox.closest('.module-card');
-        const allCheckbox = roleGroup.querySelector('input[value="all"]');
-        const individualCheckboxes = roleGroup.querySelectorAll('input[name^="modules["]:not([value="all"])');
-        
-        if (checkbox.checked) {
-            moduleCard.classList.add('active');
-            allCheckbox.disabled = false;
-            individualCheckboxes.forEach(cb => {
-                cb.disabled = false;
-                // If no roles selected, perhaps select all by default or leave empty
-            });
-            if (individualCheckboxes.length > 0 && Array.from(individualCheckboxes).every(cb => !cb.checked) && !allCheckbox.checked) {
-                allCheckbox.checked = true;
-                toggleAllRoles(allCheckbox, moduleCode);
-            }
-        } else {
-            moduleCard.classList.remove('active');
-            allCheckbox.checked = false;
-            allCheckbox.disabled = true;
-            individualCheckboxes.forEach(cb => {
-                cb.checked = false;
-                cb.disabled = true;
-            });
-        }
-        
-        updatePermissions(moduleCode);
-    }
 
     function toggleAllRoles(allCheckbox, moduleCode) {
         const roleGroup = document.getElementById(moduleCode + 'Roles');
@@ -472,9 +453,9 @@
         
         individualCheckboxes.forEach(cb => {
             cb.checked = allCheckbox.checked;
-            cb.disabled = allCheckbox.checked;
         });
         
+        updateModuleEnabled(moduleCode);
         updatePermissions(moduleCode);
     }
 
@@ -483,70 +464,67 @@
         const allCheckbox = roleGroup.querySelector('input[value="all"]');
         const individualCheckboxes = roleGroup.querySelectorAll('input[name^="modules["]:not([value="all"])');
         
-        if (checkbox.checked) {
+        if (!checkbox.checked) {
             allCheckbox.checked = false;
-            individualCheckboxes.forEach(cb => cb.disabled = false);
-        }
-        
-        const anyIndividualChecked = Array.from(individualCheckboxes).some(cb => cb.checked);
-        if (!anyIndividualChecked) {
+        } else if ([...individualCheckboxes].every(cb => cb.checked)) {
             allCheckbox.checked = true;
-            toggleAllRoles(allCheckbox, moduleCode);
         }
         
+        updateModuleEnabled(moduleCode);
         updatePermissions(moduleCode);
     }
-function loadCompaniesByLocation() {
-    const locationSelect = document.getElementById('location');
-    const companySelect = document.getElementById('company_id');
-    const location = locationSelect.value;
-    
-    if (!location) {
-        companySelect.innerHTML = '<option value="">Select Company</option>';
-        return;
-    }
-    
-    // Show loading state
-    companySelect.innerHTML = '<option value="">Loading companies...</option>';
-    companySelect.disabled = true;
-    
-    // Use fetch instead of axios (more reliable, no dependencies)
-    fetch(`/api/companies/${location}`)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(companies => {
+
+    function loadCompaniesByLocation() {
+        const locationSelect = document.getElementById('location');
+        const companySelect = document.getElementById('company_id');
+        const location = locationSelect.value;
+        
+        if (!location) {
             companySelect.innerHTML = '<option value="">Select Company</option>';
-            
-            if (companies.length === 0) {
-                companySelect.innerHTML += '<option value="">No companies found</option>';
-            } else {
-                companies.forEach(company => {
-                    const option = document.createElement('option');
-                    option.value = company.id;
-                    option.textContent = company.name;
-                    companySelect.appendChild(option);
-                });
-            }
-            
-            companySelect.disabled = false;
-        })
-        .catch(error => {
-            console.error('Error loading companies:', error);
-            companySelect.innerHTML = '<option value="">Failed to load companies</option>';
-            companySelect.disabled = false;
-            
-            // Show alert if function exists
-            if (typeof showAlert === 'function') {
-                showAlert('error', 'Error', 'Failed to load companies. Please try again.');
-            } else {
-                alert('Failed to load companies. Please try again.');
-            }
-        });
-}
+            return;
+        }
+        
+        // Show loading state
+        companySelect.innerHTML = '<option value="">Loading companies...</option>';
+        companySelect.disabled = true;
+        
+        // Use fetch instead of axios (more reliable, no dependencies)
+        fetch(`/api/companies/${location}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(companies => {
+                companySelect.innerHTML = '<option value="">Select Company</option>';
+                
+                if (companies.length === 0) {
+                    companySelect.innerHTML += '<option value="">No companies found</option>';
+                } else {
+                    companies.forEach(company => {
+                        const option = document.createElement('option');
+                        option.value = company.id;
+                        option.textContent = company.name;
+                        companySelect.appendChild(option);
+                    });
+                }
+                
+                companySelect.disabled = false;
+            })
+            .catch(error => {
+                console.error('Error loading companies:', error);
+                companySelect.innerHTML = '<option value="">Failed to load companies</option>';
+                companySelect.disabled = false;
+                
+                // Show alert if function exists
+                if (typeof showAlert === 'function') {
+                    showAlert('error', 'Error', 'Failed to load companies. Please try again.');
+                } else {
+                    alert('Failed to load companies. Please try again.');
+                }
+            });
+    }
 
     function cancelForm() {
         confirmAction(
@@ -563,11 +541,10 @@ function loadCompaniesByLocation() {
         const permissions = [];
         
         Object.keys(moduleData).forEach(moduleCode => {
-            const checkbox = document.getElementById(moduleCode + 'Module');
             const roleGroup = document.getElementById(moduleCode + 'Roles');
+            const selectedCheckboxes = roleGroup.querySelectorAll('input[name^="modules["]:checked:not([value="all"])');
             
-            if (checkbox && roleGroup && checkbox.checked) {
-                const selectedCheckboxes = roleGroup.querySelectorAll('input[name^="modules["]:checked:not([value="all"])');
+            if (roleGroup && selectedCheckboxes.length > 0) {
                 selectedCheckboxes.forEach(option => {
                     const roleId = option.value;
                     const roleName = option.closest('label').textContent.trim();
@@ -591,72 +568,110 @@ function loadCompaniesByLocation() {
             ).join('');
         }
     }
-
-    // Form submission
-    document.getElementById('userForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        
-        const formData = new FormData(this);
-        
-        // Handle 'all' checkboxes before submission
-        Object.keys(moduleData).forEach(moduleCode => {
-            const roleGroup = document.getElementById(moduleCode + 'Roles');
-            const allCheckbox = roleGroup.querySelector('input[value="all"]');
-            if (allCheckbox && allCheckbox.checked) {
-                allCheckbox.checked = false; // Deselect 'all'
-            }
-        });
-        
-        // Validate form
-        if (!validateForm()) {
+// Form submission
+document.getElementById('userForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    if (!validateForm()) {
+        return;
+    }
+    
+    // Build modules array with debugging
+    let moduleIndex = 0;
+    const modulesDebug = [];
+    
+    Object.keys(moduleData).forEach(moduleCode => {
+        const roleGroup = document.getElementById(moduleCode + 'Roles');
+        if (!roleGroup) {
+            console.warn(`Role group not found for ${moduleCode}`);
             return;
         }
         
-        showLoading();
+        const selectedRoles = roleGroup.querySelectorAll('input[name^="modules["]:checked:not([value="all"])');
         
-        // Submit to Laravel backend
-        axios.post('{{ route("users.store") }}', formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data'
-            }
-        })
-        .then(response => {
-            if (response.data.success) {
-                showAlert('success', 'Success', 'User created successfully!');
-                setTimeout(() => {
-                    window.location.href = '{{ route("dashboard.index") }}';
-                }, 2000);
-            } else {
-                throw new Error(response.data.message || 'Failed to create user');
-            }
-        })
-        .catch(error => {
-            console.error('Error creating user:', error);
-            
-            let errorMessage = 'Failed to create user';
-            if (error.response && error.response.data) {
-                if (error.response.data.errors) {
-                    const errors = error.response.data.errors;
-                    errorMessage = Object.values(errors).flat().join('<br>');
-                    
-                    Object.keys(errors).forEach(field => {
-                        const element = document.getElementById(field);
-                        if (element) {
-                            element.classList.add('is-invalid');
-                        }
-                    });
-                } else if (error.response.data.message) {
-                    errorMessage = error.response.data.message;
-                }
-            }
-            
-            showAlert('error', 'Error', errorMessage);
-        })
-        .finally(() => {
-            hideLoading();
+        if (selectedRoles.length > 0) {
+            modulesDebug.push(`${moduleCode}: ${selectedRoles.length} roles`);
+        }
+        
+        selectedRoles.forEach(roleCheckbox => {
+            moduleIndex++;
         });
     });
-
+    
+    console.log('Module summary:', modulesDebug.join(', '));
+    console.log('Total module assignments:', moduleIndex);
+    
+    // Check if any modules selected
+    if (moduleIndex === 0) {
+        showAlert('warning', 'No Modules Selected', 'Please select at least one role from any module before submitting.');
+        return;
+    }
+    
+    showLoading();
+    
+    // Build FormData
+    const formData = new FormData();
+    
+    // Add basic fields
+    formData.append('name', document.getElementById('name').value);
+    formData.append('employee_id', document.getElementById('employee_id').value);
+    formData.append('email', document.getElementById('email').value);
+    formData.append('phone', document.getElementById('phone').value);
+    formData.append('location', document.getElementById('location').value);
+    formData.append('company_id', document.getElementById('company_id').value);
+    formData.append('job_title', document.getElementById('job_title').value || '');
+    formData.append('department', document.getElementById('department').value || '');
+    formData.append('_token', document.querySelector('input[name="_token"]').value);
+    
+    // Build modules array
+    moduleIndex = 0;
+    Object.keys(moduleData).forEach(moduleCode => {
+        const roleGroup = document.getElementById(moduleCode + 'Roles');
+        const selectedRoles = roleGroup.querySelectorAll('input[name^="modules["]:checked:not([value="all"])');
+        
+        selectedRoles.forEach(roleCheckbox => {
+            formData.append(`modules[${moduleIndex}][module_id]`, moduleData[moduleCode].id);
+            formData.append(`modules[${moduleIndex}][role_id]`, roleCheckbox.value);
+            formData.append(`modules[${moduleIndex}][location]`, document.getElementById('location').value);
+            moduleIndex++;
+        });
+    });
+    
+    // Submit
+    fetch('{{ route("users.store") }}', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json'
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.message || `HTTP ${response.status}`);
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            showAlert('success', 'Success', 'User created successfully!');
+            setTimeout(() => {
+                window.location.href = '{{ route("dashboard.index") }}';
+            }, 2000);
+        } else {
+            throw new Error(data.message || 'Failed to create user');
+        }
+    })
+    .catch(error => {
+        console.error('Submission error:', error);
+        showAlert('error', 'Error', error.message || 'Failed to create user. Please try again.');
+    })
+    .finally(() => {
+        hideLoading();
+    });
+});
     function validateForm() {
         let isValid = true;
         const requiredFields = ['name', 'employee_id', 'email', 'phone', 'location', 'company_id'];
@@ -674,10 +689,9 @@ function loadCompaniesByLocation() {
         // Check modules
         let hasValidModule = false;
         Object.keys(moduleData).forEach(moduleCode => {
-            const checkbox = document.getElementById(moduleCode + 'Module');
             const roleGroup = document.getElementById(moduleCode + 'Roles');
             const selectedRoles = roleGroup.querySelectorAll('input[name^="modules["]:checked:not([value="all"])').length;
-            if (checkbox.checked && selectedRoles > 0) {
+            if (selectedRoles > 0) {
                 hasValidModule = true;
             }
         });

@@ -6,19 +6,11 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class StoreUserRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized to make this request.
-     */
     public function authorize(): bool
     {
-        return true; // We handle authorization in middleware
+        return true;
     }
 
-    /**
-     * Get the validation rules that apply to the request.
-     *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
-     */
     public function rules(): array
     {
         return [
@@ -27,14 +19,14 @@ class StoreUserRequest extends FormRequest
                 'string',
                 'max:255',
                 'min:2',
-                'regex:/^[a-zA-Z\s]+$/' // Only letters and spaces
+                'regex:/^[a-zA-Z\s]+$/'
             ],
             'employee_id' => [
                 'required',
                 'string',
                 'max:50',
                 'unique:users,employee_id',
-                'regex:/^[A-Z0-9-]+$/' // Uppercase letters, numbers, and hyphens
+                'regex:/^[A-Z0-9-]+$/'
             ],
             'email' => [
                 'required',
@@ -46,7 +38,7 @@ class StoreUserRequest extends FormRequest
                 'required',
                 'string',
                 'max:20',
-                'regex:/^[\+]?[0-9\s\-\(\)]+$/' // Phone number format
+                'regex:/^[\+]?[0-9\s\-\(\)]+$/'
             ],
             'location' => [
                 'required',
@@ -58,26 +50,40 @@ class StoreUserRequest extends FormRequest
                 'integer',
                 'exists:companies,id'
             ],
+            'job_title' => [
+                'nullable',
+                'string',
+                'max:255'
+            ],
+            'department' => [
+                'nullable',
+                'string',
+                'max:255'
+            ],
+            // FIXED: Accept numeric array of modules
             'modules' => [
                 'required',
                 'array',
-                'min:1' // At least one module must be selected
+                'min:1'
             ],
-            'modules.*.enabled' => [
-                'sometimes',
-                'boolean'
+            'modules.*.module_id' => [
+                'required',
+                'integer',
+                'exists:modules,id'
             ],
             'modules.*.role_id' => [
-                'required_if:modules.*.enabled,1',
+                'required',
                 'integer',
                 'exists:roles,id'
+            ],
+            'modules.*.location' => [
+                'nullable',
+                'string',
+                'max:255'
             ]
         ];
     }
 
-    /**
-     * Get custom messages for validator errors.
-     */
     public function messages(): array
     {
         return [
@@ -96,73 +102,42 @@ class StoreUserRequest extends FormRequest
             'company_id.required' => 'Please select a company.',
             'company_id.exists' => 'The selected company is invalid.',
             'modules.required' => 'Please select at least one module.',
-            'modules.min' => 'Please select at least one module.',
-            'modules.*.role_id.required_if' => 'Please select a role for the enabled module.',
+            'modules.min' => 'Please select at least one module with a role.',
+            'modules.*.module_id.required' => 'Module ID is required.',
+            'modules.*.module_id.exists' => 'The selected module is invalid.',
+            'modules.*.role_id.required' => 'Role is required for each module.',
             'modules.*.role_id.exists' => 'The selected role is invalid.'
         ];
     }
 
-    /**
-     * Get custom attributes for validator errors.
-     */
-    public function attributes(): array
-    {
-        return [
-            'name' => 'name',
-            'employee_id' => 'employee ID',
-            'email' => 'email address',
-            'phone' => 'phone number',
-            'location' => 'location',
-            'company_id' => 'company',
-            'modules' => 'modules'
-        ];
-    }
-
-    /**
-     * Prepare the data for validation.
-     */
     protected function prepareForValidation(): void
     {
-        // Clean and format data before validation
         $this->merge([
-            'name' => trim($this->name),
-            'employee_id' => strtoupper(trim($this->employee_id)),
-            'email' => strtolower(trim($this->email)),
-            'phone' => preg_replace('/[^0-9\+\-\(\)\s]/', '', $this->phone),
-            'location' => strtolower($this->location)
+            'name' => trim($this->name ?? ''),
+            'employee_id' => strtoupper(trim($this->employee_id ?? '')),
+            'email' => strtolower(trim($this->email ?? '')),
+            'phone' => preg_replace('/[^0-9\+\-\(\)\s]/', '', $this->phone ?? ''),
+            'location' => strtolower($this->location ?? '')
         ]);
     }
 
-    /**
-     * Configure the validator instance.
-     */
     public function withValidator($validator)
     {
         $validator->after(function ($validator) {
-            // Custom validation: At least one module must be enabled
             $modules = $this->input('modules', []);
-            $hasEnabledModule = false;
-
-            foreach ($modules as $moduleData) {
-                if (isset($moduleData['enabled']) && $moduleData['enabled']) {
-                    $hasEnabledModule = true;
-                    break;
+            
+            // Check if at least one module is provided
+            if (empty($modules)) {
+                $validator->errors()->add('modules', 'At least one module with a role must be assigned');
+            }
+            
+            // Validate each module has required fields
+            foreach ($modules as $index => $module) {
+                if (empty($module['module_id'])) {
+                    $validator->errors()->add("modules.{$index}.module_id", 'Module ID is required');
                 }
-            }
-
-            if (!$hasEnabledModule) {
-                $validator->errors()->add('modules', 'Please enable at least one module and assign a role.');
-            }
-
-            // Validate that enabled modules have roles assigned
-            foreach ($modules as $moduleCode => $moduleData) {
-                if (isset($moduleData['enabled']) && $moduleData['enabled']) {
-                    if (empty($moduleData['role_id'])) {
-                        $validator->errors()->add(
-                            "modules.{$moduleCode}.role_id",
-                            "Please select a role for the {$moduleCode} module."
-                        );
-                    }
+                if (empty($module['role_id'])) {
+                    $validator->errors()->add("modules.{$index}.role_id", 'Role is required');
                 }
             }
         });

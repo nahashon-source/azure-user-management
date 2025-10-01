@@ -29,33 +29,33 @@ class UserProvisioningService
  * @return array|null
  * @throws \Exception
  */
-public function findUserByUPN(string $upn): ?array
-{
-    try {
-        // Query Microsoft Graph for the user by UPN
-        $response = $this->graphClient
-            ->createRequest('GET', '/users/' . urlencode($upn))
-            ->setReturnType(\Microsoft\Graph\Model\User::class)
-            ->execute();
+// public function findUserByUPN(string $upn): ?array
+// {
+//     try {
+//         // Query Microsoft Graph for the user by UPN
+//         $response = $this->graphClient
+//             ->createRequest('GET', '/users/' . urlencode($upn))
+//             ->setReturnType(\Microsoft\Graph\Model\User::class)
+//             ->execute();
 
-        if ($response) {
-            return [
-                'id'               => $response->getId(),
-                'userPrincipalName'=> $response->getUserPrincipalName(),
-                'displayName'      => $response->getDisplayName(),
-            ];
-        }
+//         if ($response) {
+//             return [
+//                 'id'               => $response->getId(),
+//                 'userPrincipalName'=> $response->getUserPrincipalName(),
+//                 'displayName'      => $response->getDisplayName(),
+//             ];
+//         }
 
-        return null;
-    } catch (\Exception $e) {
-        // If Azure returns "not found", handle gracefully
-        if (str_contains($e->getMessage(), 'Request_ResourceNotFound')) {
-            return null;
-        }
+//         return null;
+//     } catch (\Exception $e) {
+//         // If Azure returns "not found", handle gracefully
+//         if (str_contains($e->getMessage(), 'Request_ResourceNotFound')) {
+//             return null;
+//         }
 
-        throw $e;
-    }
-}
+//         throw $e;
+//     }
+// }
 
 
     /**
