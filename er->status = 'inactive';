@@ -1,0 +1,21 @@
+[90m= [39m[34;4mApp\Models\User[39;24m {#6030
+    [34mid[39m: [35m21[39m,
+    [34mname[39m: "[32mNahasoon[39m",
+    [34memail[39m: "[32madmin.20111@freight-in-time.com[39m",
+    [34memail_verified_at[39m: [36mnull[39m,
+    #[33mpassword[39m: "[32m$2y$12$dviohV77q8eB39E0hxz9Eutq3MAqeVp1fr6p1oxcLSA/Tekj.04Oe[39m",
+    #[33mremember_token[39m: [36mnull[39m,
+    [34memployee_id[39m: "[32mEMP1206721[39m",
+    [34mphone[39m: "[32m0748495724[39m",
+    [34mlocation[39m: "[32mkenya[39m",
+    [34mcompany_id[39m: [35m1[39m,
+    [34mstatus[39m: "[32mactive[39m",
+    [34mcreated_at[39m: "[32m2025-10-01 08:56:50[39m",
+    [34mupdated_at[39m: "[32m2025-10-01 08:56:52[39m",
+    [34mazure_id[39m: "[32m67dd644a-1b5d-48bf-998f-418e6869d939[39m",
+    [34mazure_upn[39m: "[32memp1206721@freight-in-time.com[39m",
+    [34mazure_display_name[39m: "[32mNahasoon[39m",
+    [34mjob_title[39m: [36mnull[39m,
+    [34mdepartment[39m: [36mnull[39m,
+  }
+

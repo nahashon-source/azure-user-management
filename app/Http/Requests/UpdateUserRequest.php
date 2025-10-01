@@ -30,14 +30,14 @@ class UpdateUserRequest extends FormRequest
                 'string',
                 'max:255',
                 'min:2',
-                'regex:/^[a-zA-Z\s]+$/' // Only letters and spaces
+                'regex:/^[a-zA-Z\s]+$/'
             ],
             'employee_id' => [
                 'required',
                 'string',
                 'max:50',
                 Rule::unique('users', 'employee_id')->ignore($userId),
-                'regex:/^[A-Z0-9-]+$/' // Uppercase letters, numbers, and hyphens
+                'regex:/^[A-Z0-9-]+$/'
             ],
             'email' => [
                 'required',
@@ -49,13 +49,13 @@ class UpdateUserRequest extends FormRequest
                 'required',
                 'string',
                 'max:20',
-                'regex:/^[\+]?[0-9\s\-\(\)]+$/' // Phone number format
+                'regex:/^[\+]?[0-9\s\-\(\)]+$/'
             ],
-            'location' => [
-                'required',
-                'string',
-                'in:kenya,uganda'
-            ],
+          'location' => [
+    'required',
+    'string',
+    'exists:locations,code'
+],
             'company_id' => [
                 'required',
                 'integer',
@@ -65,12 +65,30 @@ class UpdateUserRequest extends FormRequest
                 'sometimes',
                 'array'
             ],
-            'modules.*.enabled' => [
+            'modules.*.location' => [
                 'sometimes',
-                'boolean'
+                'array'
+            ],
+            'modules.*.location.*' => [
+                'sometimes',
+                'string',
+                'exists:locations,code'
+            ],
+            'modules.*.module_id' => [
+                'sometimes',
+                'array'
+            ],
+            'modules.*.module_id.*' => [
+                'sometimes',
+                'integer',
+                'exists:modules,id'
             ],
             'modules.*.role_id' => [
-                'required_if:modules.*.enabled,1',
+                'sometimes',
+                'array'
+            ],
+            'modules.*.role_id.*' => [
+                'sometimes',
                 'integer',
                 'exists:roles,id'
             ],
@@ -102,8 +120,9 @@ class UpdateUserRequest extends FormRequest
             'location.in' => 'The selected location is invalid.',
             'company_id.required' => 'Please select a company.',
             'company_id.exists' => 'The selected company is invalid.',
-            'modules.*.role_id.required_if' => 'Please select a role for the enabled module.',
-            'modules.*.role_id.exists' => 'The selected role is invalid.',
+            'modules.*.location.*.exists' => 'The selected location for the module is invalid.',
+            'modules.*.module_id.*.exists' => 'The selected module is invalid.',
+            'modules.*.role_id.*.exists' => 'The selected role for the module is invalid.',
             'status.in' => 'The selected status is invalid.'
         ];
     }
@@ -121,6 +140,9 @@ class UpdateUserRequest extends FormRequest
             'location' => 'location',
             'company_id' => 'company',
             'modules' => 'modules',
+            'modules.*.location' => 'module location',
+            'modules.*.module_id' => 'module ID',
+            'modules.*.role_id' => 'module role',
             'status' => 'status'
         ];
     }
@@ -146,15 +168,33 @@ class UpdateUserRequest extends FormRequest
     public function withValidator($validator)
     {
         $validator->after(function ($validator) {
-            // If modules are being updated, validate enabled modules have roles
+            // If modules are being updated, validate that enabled modules have both module_id and role_id
             $modules = $this->input('modules', []);
             
-            foreach ($modules as $moduleCode => $moduleData) {
-                if (isset($moduleData['enabled']) && $moduleData['enabled']) {
-                    if (empty($moduleData['role_id'])) {
+            foreach ($modules as $index => $moduleData) {
+                $locations = $moduleData['location'] ?? [];
+                $moduleIds = $moduleData['module_id'] ?? [];
+                $roleIds = $moduleData['role_id'] ?? [];
+
+                // Check if any of the arrays are non-empty (indicating an assignment attempt)
+                if (!empty($locations) || !empty($moduleIds) || !empty($roleIds)) {
+                    // Ensure all required fields are present
+                    if (empty($moduleIds)) {
                         $validator->errors()->add(
-                            "modules.{$moduleCode}.role_id",
-                            "Please select a role for the {$moduleCode} module."
+                            "modules.{$index}.module_id",
+                            "Please select at least one module for assignment."
+                        );
+                    }
+                    if (empty($roleIds)) {
+                        $validator->errors()->add(
+                            "modules.{$index}.role_id",
+                            "Please select at least one role for the module."
+                        );
+                    }
+                    if (empty($locations)) {
+                        $validator->errors()->add(
+                            "modules.{$index}.location",
+                            "Please select at least one location for the module."
                         );
                     }
                 }

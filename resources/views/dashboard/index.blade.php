@@ -786,8 +786,20 @@
 
     <!-- Users Table -->
     <div class="users-table-container">
-       
-
+        <div class="table-header">
+            <div class="table-title">
+                <i class="fas fa-users-cog"></i>
+                <span>Users Management</span>
+            </div>
+            <div class="table-filters">
+                <select id="statusFilter" class="filter-select">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="pending">Pending</option>
+                    <option value="inactive">Inactive</option>
+                </select>
+            </div>
+        </div>
         <div class="table-wrapper">
             <table class="users-table">
                 <thead>
@@ -830,10 +842,17 @@
                                         title="Edit User" aria-label="Edit user {{ $user->name }}">
                                     <i class="fas fa-edit"></i>
                                 </button>
+                                @if($user->status == 'inactive')
+                                <button class="btn btn-sm btn-success" onclick="enableUser('{{ $user->id }}')" 
+                                        title="Enable User" aria-label="Enable user {{ $user->name }}">
+                                    <i class="fas fa-user-check"></i>
+                                </button>
+                                @else
                                 <button class="btn btn-sm btn-danger" onclick="disableUser('{{ $user->id }}')" 
                                         title="Disable User" aria-label="Disable user {{ $user->name }}">
                                     <i class="fas fa-user-slash"></i>
                                 </button>
+                                @endif
                             </td>
                         </tr>
                     @empty
@@ -905,11 +924,14 @@
                 }
             });
 
-            document.getElementById('statusFilter').addEventListener('change', function(e) {
-                filters.status = e.target.value;
-                currentPage = 1;
-                loadUsers();
-            });
+            const statusFilter = document.getElementById('statusFilter');
+            if (statusFilter) {
+                statusFilter.addEventListener('change', function(e) {
+                    filters.status = e.target.value;
+                    currentPage = 1;
+                    loadUsers();
+                });
+            }
 
             window.addEventListener('click', function(e) {
                 if (e.target.classList.contains('modal')) {
@@ -991,41 +1013,57 @@
                 return;
             }
 
-            tbody.innerHTML = users.map(user => `
-                <tr>
-                    <td>
-                        <div class="user-info">
-                            <div class="user-avatar" title="${user.name}">${user.name.substring(0, 2).toUpperCase()}</div>
-                            <div class="user-details">
-                                <div class="user-name">${escapeHtml(user.name)}</div>
-                            </div>
-                        </div>
-                    </td>
-                    <td title="${user.email}">${escapeHtml(user.email)}</td>
-                    <td>${escapeHtml(user.login_id || 'N/A')}</td>
-                    <td>${escapeHtml(user.employee_id)}</td>
-                    <td>${new Date(user.created_at).toLocaleDateString()}</td>
-                    <td>
-                        <span class="status-badge status-${user.status}" title="Status: ${user.status}">
-                            ${user.status.charAt(0).toUpperCase() + user.status.slice(1)}
-                        </span>
-                    </td>
-                    <td class="actions-cell">
-                        <button class="btn btn-sm btn-primary" onclick="viewUser('${user.id}')" 
-                                title="View User" aria-label="View user ${escapeHtml(user.name)}">
-                            <i class="fas fa-eye"></i>
+            tbody.innerHTML = users.map(user => {
+                let statusButton;
+                if (user.status === 'inactive') {
+                    statusButton = `
+                        <button class="btn btn-sm btn-success" onclick="enableUser('${user.id}')" 
+                                title="Enable User" aria-label="Enable user ${escapeHtml(user.name)}">
+                            <i class="fas fa-user-check"></i>
                         </button>
-                        <button class="btn btn-sm btn-warning" onclick="editUser('${user.id}')" 
-                                title="Edit User" aria-label="Edit user ${escapeHtml(user.name)}">
-                            <i class="fas fa-edit"></i>
-                        </button>
+                    `;
+                } else {
+                    statusButton = `
                         <button class="btn btn-sm btn-danger" onclick="disableUser('${user.id}')" 
                                 title="Disable User" aria-label="Disable user ${escapeHtml(user.name)}">
                             <i class="fas fa-user-slash"></i>
                         </button>
-                    </td>
-                </tr>
-            `).join('');
+                    `;
+                }
+
+                return `
+                    <tr>
+                        <td>
+                            <div class="user-info">
+                                <div class="user-avatar" title="${user.name}">${user.name.substring(0, 2).toUpperCase()}</div>
+                                <div class="user-details">
+                                    <div class="user-name">${escapeHtml(user.name)}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td title="${user.email}">${escapeHtml(user.email)}</td>
+                        <td>${escapeHtml(user.login_id || 'N/A')}</td>
+                        <td>${escapeHtml(user.employee_id)}</td>
+                        <td>${new Date(user.created_at).toLocaleDateString()}</td>
+                        <td>
+                            <span class="status-badge status-${user.status}" title="Status: ${user.status}">
+                                ${user.status.charAt(0).toUpperCase() + user.status.slice(1)}
+                            </span>
+                        </td>
+                        <td class="actions-cell">
+                            <button class="btn btn-sm btn-primary" onclick="viewUser('${user.id}')" 
+                                    title="View User" aria-label="View user ${escapeHtml(user.name)}">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="btn btn-sm btn-warning" onclick="editUser('${user.id}')" 
+                                    title="Edit User" aria-label="Edit user ${escapeHtml(user.name)}">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            ${statusButton}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
         }
 
         function updateStats() {
@@ -1130,24 +1168,249 @@
         }
 
         function disableUser(userId) {
+            // First, check the current status of the user from the table
+            const userRow = document.querySelector(`button[onclick="disableUser('${userId}')"]`)?.closest('tr');
+            const statusBadge = userRow?.querySelector('.status-badge');
+            const currentStatus = statusBadge?.textContent.trim().toLowerCase();
+            
+            // If user is already disabled/inactive, show message and return
+            if (currentStatus === 'inactive') {
+                showAlert('info', 'Already Disabled', 'This user is already disabled');
+                return;
+            }
+            
             confirmAction(
                 'Disable User',
                 'Are you sure you want to disable this user? This will revoke access to all systems.',
                 function() {
                     showLoading();
                     
-                    setTimeout(() => {
-                        try {
-                            showAlert('success', 'Success', 'User has been disabled');
-                            loadUsers();
-                            hideLoading();
-                            announceToScreenReader('User has been disabled successfully');
-                        } catch (error) {
-                            handleError(error);
+                    // Make API call to disable user
+                    const csrfToken = document.querySelector('meta[name="csrf-token"]');
+                    if (!csrfToken) {
+                        showAlert('error', 'Error', 'CSRF token not found. Please refresh the page.');
+                        hideLoading();
+                        return;
+                    }
+                    
+                    fetch(`/api/users/${userId}/disable`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken.content,
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        credentials: 'same-origin'
+                    })
+                    .then(response => {
+                        const contentType = response.headers.get('content-type');
+                        if (!contentType || !contentType.includes('application/json')) {
+                            throw new Error('Server returned non-JSON response. Route may not be configured correctly.');
                         }
-                    }, 500);
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.success) {
+                            // Update stats using your new stats endpoint
+                            updateDashboardStats('disable');
+                            
+                            // Update the user row status in the table
+                            if (statusBadge) {
+                                statusBadge.textContent = 'Inactive';
+                                statusBadge.className = 'status-badge status-inactive';
+                                statusBadge.title = 'Status: inactive';
+                            }
+                            
+                            showAlert('success', 'Success', data.message || 'User has been disabled successfully');
+                            announceToScreenReader('User has been disabled successfully');
+                        } else {
+                            showAlert('error', 'Error', data.message || 'Failed to disable user');
+                        }
+                        hideLoading();
+                    })
+                    .catch(error => {
+                        console.error('Error disabling user:', error);
+                        hideLoading();
+                        
+                        if (error.message.includes('non-JSON response')) {
+                            showAlert('error', 'Route Error', 'The disable route is not configured. Please check your routes file.');
+                        } else {
+                            showAlert('error', 'Error', 'Failed to disable user: ' + error.message);
+                        }
+                    });
                 }
             );
+        }
+
+        function enableUser(userId) {
+            // First, check the current status of the user from the table
+            const userRow = document.querySelector(`button[onclick="enableUser('${userId}')"]`)?.closest('tr');
+            const statusBadge = userRow?.querySelector('.status-badge');
+            const currentStatus = statusBadge?.textContent.trim().toLowerCase();
+            
+            // If user is already enabled/active, show message and return
+            if (currentStatus === 'active') {
+                showAlert('info', 'Already Enabled', 'This user is already enabled');
+                return;
+            }
+            
+            confirmAction(
+                'Enable User',
+                'Are you sure you want to enable this user? This will restore access to all systems.',
+                function() {
+                    showLoading();
+                    
+                    // Make API call to enable user
+                    const csrfToken = document.querySelector('meta[name="csrf-token"]');
+                    if (!csrfToken) {
+                        showAlert('error', 'Error', 'CSRF token not found. Please refresh the page.');
+                        hideLoading();
+                        return;
+                    }
+                    
+                    fetch(`/api/users/${userId}/enable`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken.content,
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        credentials: 'same-origin'
+                    })
+                    .then(response => {
+                        const contentType = response.headers.get('content-type');
+                        if (!contentType || !contentType.includes('application/json')) {
+                            throw new Error('Server returned non-JSON response. Route may not be configured correctly.');
+                        }
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.success) {
+                            // Update stats using your new stats endpoint
+                            updateDashboardStats('enable');
+                            
+                            // Update the user row status in the table
+                            if (statusBadge) {
+                                statusBadge.textContent = 'Active';
+                                statusBadge.className = 'status-badge status-active';
+                                statusBadge.title = 'Status: active';
+                            }
+                            
+                            showAlert('success', 'Success', data.message || 'User has been enabled successfully');
+                            announceToScreenReader('User has been enabled successfully');
+                        } else {
+                            showAlert('error', 'Error', data.message || 'Failed to enable user');
+                        }
+                        hideLoading();
+                    })
+                    .catch(error => {
+                        console.error('Error enabling user:', error);
+                        hideLoading();
+                        
+                        if (error.message.includes('non-JSON response')) {
+                            showAlert('error', 'Route Error', 'The enable route is not configured. Please check your routes file.');
+                        } else {
+                            showAlert('error', 'Error', 'Failed to enable user: ' + error.message);
+                        }
+                    });
+                }
+            );
+        }
+
+        // Enhanced function to update dashboard stats using your new endpoint
+        function updateDashboardStats(action = 'disable') {
+            // Use your new UserManagementController stats endpoint
+            fetch('/users/stats')
+                .then(response => {
+                    if (!response.ok) throw new Error('Failed to fetch stats');
+                    return response.json();
+                })
+                .then(stats => {
+                    updateStatCards(stats);
+                    highlightStatChanges();
+                })
+                .catch(error => {
+                    console.warn('Could not fetch updated stats from users endpoint, trying dashboard endpoint:', error);
+                    // Fallback to dashboard stats endpoint
+                    fetch('/dashboard/stats')
+                        .then(response => {
+                            if (!response.ok) throw new Error('Failed to fetch dashboard stats');
+                            return response.json();
+                        })
+                        .then(stats => {
+                            updateStatCards(stats);
+                            highlightStatChanges();
+                        })
+                        .catch(fallbackError => {
+                            console.warn('Both endpoints failed, using client-side calculation:', fallbackError);
+                            // Final fallback: client-side calculation
+                            calculateStatsClientSide(action);
+                        });
+                });
+        }
+
+        // Update stat cards with new data
+        function updateStatCards(stats) {
+            if (stats.total !== undefined) {
+                document.getElementById('totalUsers').textContent = stats.total;
+            }
+            if (stats.active !== undefined) {
+                document.getElementById('activeUsers').textContent = stats.active;
+            }
+            if (stats.pending !== undefined) {
+                document.getElementById('pendingUsers').textContent = stats.pending;
+            }
+            if (stats.inactive !== undefined) {
+                document.getElementById('inactiveUsers').textContent = stats.inactive;
+            }
+        }
+
+        // Client-side calculation as fallback
+        function calculateStatsClientSide(action = 'disable') {
+            const activeCount = document.getElementById('activeUsers');
+            const inactiveCount = document.getElementById('inactiveUsers');
+            
+            if (activeCount && inactiveCount) {
+                const currentActive = parseInt(activeCount.textContent) || 0;
+                const currentInactive = parseInt(inactiveCount.textContent) || 0;
+                
+                if (action === 'disable') {
+                    // Update counts (assuming one active user was disabled)
+                    activeCount.textContent = Math.max(0, currentActive - 1);
+                    inactiveCount.textContent = currentInactive + 1;
+                } else {
+                    // Update counts (assuming one inactive user was enabled)
+                    activeCount.textContent = currentActive + 1;
+                    inactiveCount.textContent = Math.max(0, currentInactive - 1);
+                }
+                
+                highlightStatChanges();
+            }
+        }
+
+        // Visual feedback for stat changes
+        function highlightStatChanges() {
+            const statCards = document.querySelectorAll('.stat-card');
+            statCards.forEach(card => {
+                card.style.transform = 'scale(1.05)';
+                card.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.15)';
+                card.style.transition = 'all 0.3s ease';
+                
+                setTimeout(() => {
+                    card.style.transform = 'scale(1)';
+                    card.style.boxShadow = '';
+                }, 300);
+            });
         }
 
         function openModal(modalId) {
@@ -1318,6 +1581,7 @@
             viewUser,
             editUser,
             disableUser,
+            enableUser,
             updateStats
         };
     </script>

@@ -315,6 +315,69 @@
                 padding: 20px;
             }
         }
+
+        /* Assignment Cards */
+        .assignments-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .assignment-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+            padding: 16px;
+            color: white;
+            box-shadow: var(--shadow-sm);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .assignment-card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .assignment-card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+            font-size: 1.1em;
+            border-bottom: 1px solid rgba(255,255,255,0.2);
+            padding-bottom: 8px;
+        }
+
+        .assignment-card-body {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .assignment-detail {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9em;
+            opacity: 0.95;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--muted);
+        }
+
+        .empty-state i {
+            font-size: 3em;
+            margin-bottom: 15px;
+            opacity: 0.3;
+        }
+
+        .empty-state p {
+            font-size: 1.1em;
+            margin: 0;
+        }
     </style>
 </head>
 <body>
@@ -328,12 +391,12 @@
                         <div>Edit User</div>
                     </div>
                 </div>
-                <div>
+                {{-- <div>
                     <button type="submit" form="editUserForm" class="btn btn-primary">
                         <i class="fas fa-save"></i>
                         Update User
                     </button>
-                </div>
+                </div> --}}
             </header>
 
             <section>
@@ -485,77 +548,128 @@
                             <div class="form-section-title">
                                 <i class="fas fa-th-large"></i>
                                 Module Assignments
-                                <button type="button" class="btn btn-sm btn-success ms-3" onclick="addModuleRow()">
-                                    <i class="fas fa-plus"></i> New
-                                </button>
                             </div>
 
-                            <div id="modulesTableContainer" class="table-responsive">
-                                <table class="table table-bordered align-middle" id="modulesTable">
-                                    <thead class="table-light">
-                                        <tr>
-                                            <th style="width: 25%">Office</th>
-                                            <th style="width: 25%">Module</th>
-                                            <th style="width: 25%">Role</th>
-                                            <th style="width: 15%">Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @forelse ($assignments ?? [] as $assignmentIndex => $assignment)
+                            <!-- Summary Cards View (Default) -->
+                            <div id="assignmentsSummary">
+                                @if($userModuleAssignments && $userModuleAssignments->count() > 0)
+                                    <div class="assignments-grid">
+                                        @foreach($userModuleAssignments as $assignment)
+                                            <div class="assignment-card">
+                                                <div class="assignment-card-header">
+                                                    <i class="fas fa-cube"></i>
+                                                    <strong>{{ $assignment['module_name'] }}</strong>
+                                                </div>
+                                                <div class="assignment-card-body">
+                                                    <div class="assignment-detail">
+                                                        <i class="fas fa-map-marker-alt"></i>
+                                                        <span>{{ $assignment['location_name'] }}</span>
+                                                    </div>
+                                                    <div class="assignment-detail">
+                                                        <i class="fas fa-user-tag"></i>
+                                                        <span>{{ $assignment['role_name'] }}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                @else
+                                    <div class="empty-state">
+                                        <i class="fas fa-inbox"></i>
+                                        <p>No module assignments yet</p>
+                                    </div>
+                                @endif
+                                
+                                <div class="mt-3">
+                                    <button type="button" class="btn btn-sm btn-primary" onclick="toggleEditMode()">
+                                        <i class="fas fa-edit"></i> Edit Assignments
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Edit Form (Hidden by default) -->
+                            <div id="assignmentsEditForm" style="display: none;">
+                                <div class="alert alert-info mb-3">
+                                    <i class="fas fa-info-circle"></i>
+                                    Make your changes below and click "Update User" to save.
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <button type="button" class="btn btn-sm btn-success" onclick="addModuleRow()">
+                                        <i class="fas fa-plus"></i> Add New Assignment
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-secondary" onclick="toggleEditMode()">
+                                        <i class="fas fa-times"></i> Cancel
+                                    </button>
+                                </div>
+
+                                <div id="modulesTableContainer" class="table-responsive">
+                                    <table class="table table-bordered align-middle" id="modulesTable">
+                                        <thead class="table-light">
                                             <tr>
-                                                <td>
-                                                    <div class="checkbox-group">
-                                                        <label>
-                                                            <input type="checkbox" name="assignments[{{ $assignmentIndex }}][location][]" value="all" onchange="toggleAllCheckboxes(this, 'location', {{ $assignmentIndex }})" {{ in_array('all', $assignment['locations'] ?? []) ? 'checked' : '' }}>
-                                                            All Locations
-                                                        </label>
-                                                        @foreach($locations as $location)
-                                                            <label>
-                                                                <input type="checkbox" name="assignments[{{ $assignmentIndex }}][location][]" value="{{ $location->code }}" {{ in_array('all', $assignment['locations'] ?? []) ? 'disabled' : '' }} {{ in_array($location->code, $assignment['locations'] ?? []) ? 'checked' : '' }} onchange="validateCheckboxes(this, 'location', {{ $assignmentIndex }})">
-                                                                {{ $location->name }}
-                                                            </label>
-                                                        @endforeach
-                                                    </div>
-                                                </td>
-                                                <td>
-                                                    <div class="checkbox-group">
-                                                        <label>
-                                                            <input type="checkbox" name="assignments[{{ $assignmentIndex }}][module_id][]" value="all" onchange="toggleAllCheckboxes(this, 'module_id', {{ $assignmentIndex }})" {{ in_array('all', $assignment['module_ids'] ?? []) ? 'checked' : '' }}>
-                                                            All Modules
-                                                        </label>
-                                                        @foreach($modules as $module)
-                                                            <label>
-                                                                <input type="checkbox" name="assignments[{{ $assignmentIndex }}][module_id][]" value="{{ $module->id }}" {{ in_array('all', $assignment['module_ids'] ?? []) ? 'disabled' : '' }} {{ in_array($module->id, $assignment['module_ids'] ?? []) ? 'checked' : '' }} onchange="validateCheckboxes(this, 'module_id', {{ $assignmentIndex }})">
-                                                                {{ $module->name }}
-                                                            </label>
-                                                        @endforeach
-                                                    </div>
-                                                </td>
-                                                <td>
-                                                    <div class="checkbox-group">
-                                                        <label>
-                                                            <input type="checkbox" name="assignments[{{ $assignmentIndex }}][role_id][]" value="all" onchange="toggleAllCheckboxes(this, 'role_id', {{ $assignmentIndex }})" {{ in_array('all', $assignment['role_ids'] ?? []) ? 'checked' : '' }}>
-                                                            All Roles
-                                                        </label>
-                                                        @foreach($roles as $role)
-                                                            <label>
-                                                                <input type="checkbox" name="assignments[{{ $assignmentIndex }}][role_id][]" value="{{ $role->id }}" {{ in_array('all', $assignment['role_ids'] ?? []) ? 'disabled' : '' }} {{ in_array($role->id, $assignment['role_ids'] ?? []) ? 'checked' : '' }} onchange="validateCheckboxes(this, 'role_id', {{ $assignmentIndex }})">
-                                                                {{ $role->name }}
-                                                            </label>
-                                                        @endforeach
-                                                    </div>
-                                                </td>
-                                                <td class="text-center">
-                                                    <button type="button" class="btn btn-sm btn-danger" onclick="removeRow(this)">
-                                                        <i class="fas fa-trash"></i>
-                                                    </button>
-                                                </td>
+                                                <th style="width: 25%">Office</th>
+                                                <th style="width: 25%">Module</th>
+                                                <th style="width: 25%">Role</th>
+                                                <th style="width: 15%">Action</th>
                                             </tr>
-                                        @empty
-                                            <!-- No existing assignments -->
-                                        @endforelse
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody>
+                                            @forelse ($user->modules as $assignmentIndex => $assignment)
+                                                <tr>
+                                                    <td>
+                                                        <div class="checkbox-group">
+                                                            <label>
+                                                                <input type="checkbox" name="modules[{{ $assignmentIndex }}][location][]" value="all" onchange="toggleAllCheckboxes(this, 'location', {{ $assignmentIndex }})">
+                                                                All Locations
+                                                            </label>
+                                                            @foreach($locations as $location)
+                                                                <label>
+                                                                    <input type="checkbox" name="modules[{{ $assignmentIndex }}][location][]" value="{{ $location->code }}" {{ $assignment->pivot->location == $location->code ? 'checked' : '' }} onchange="validateCheckboxes(this, 'location', {{ $assignmentIndex }})">
+                                                                    {{ $location->name }}
+                                                                </label>
+                                                            @endforeach
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <div class="checkbox-group">
+                                                            <label>
+                                                                <input type="checkbox" name="modules[{{ $assignmentIndex }}][module_id][]" value="all" onchange="toggleAllCheckboxes(this, 'module_id', {{ $assignmentIndex }})">
+                                                                All Modules
+                                                            </label>
+                                                            @foreach($modules as $module)
+                                                                <label>
+                                                                    <input type="checkbox" name="modules[{{ $assignmentIndex }}][module_id][]" value="{{ $module->id }}" {{ $assignment->id == $module->id ? 'checked' : '' }} onchange="validateCheckboxes(this, 'module_id', {{ $assignmentIndex }})">
+                                                                    {{ $module->name }}
+                                                                </label>
+                                                            @endforeach
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <div class="checkbox-group">
+                                                            <label>
+                                                                <input type="checkbox" name="modules[{{ $assignmentIndex }}][role_id][]" value="all" onchange="toggleAllCheckboxes(this, 'role_id', {{ $assignmentIndex }})">
+                                                                All Roles
+                                                            </label>
+                                                            @foreach($roles as $role)
+                                                                <label>
+                                                                    <input type="checkbox" name="modules[{{ $assignmentIndex }}][role_id][]" value="{{ $role->id }}" {{ $assignment->pivot->role_id == $role->id ? 'checked' : '' }} onchange="validateCheckboxes(this, 'role_id', {{ $assignmentIndex }})">
+                                                                    {{ $role->name }}
+                                                                </label>
+                                                            @endforeach
+                                                        </div>
+                                                    </td>
+                                                    <td class="text-center">
+                                                        <button type="button" class="btn btn-sm btn-danger" onclick="removeRow(this)">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            @empty
+                                                <!-- No existing assignments -->
+                                            @endforelse
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
 
@@ -644,7 +758,7 @@
             @endif
         });
 
-        let rowIndex = {{ count($assignments ?? []) }};
+        let rowIndex = {{ count($user->modules ?? []) }};
 
         function addModuleRow() {
             const tableBody = document.querySelector('#modulesTable tbody');
@@ -653,12 +767,12 @@
                 <td>
                     <div class="checkbox-group">
                         <label>
-                            <input type="checkbox" name="assignments[${rowIndex}][location][]" value="all" onchange="toggleAllCheckboxes(this, 'location', ${rowIndex})">
+                            <input type="checkbox" name="modules[${rowIndex}][location][]" value="all" onchange="toggleAllCheckboxes(this, 'location', ${rowIndex})">
                             All Locations
                         </label>
                         @foreach($locations as $location)
                             <label>
-                                <input type="checkbox" name="assignments[${rowIndex}][location][]" value="{{ $location->code }}" onchange="validateCheckboxes(this, 'location', ${rowIndex})">
+                                <input type="checkbox" name="modules[${rowIndex}][location][]" value="{{ $location->code }}" onchange="validateCheckboxes(this, 'location', ${rowIndex})">
                                 {{ $location->name }}
                             </label>
                         @endforeach
@@ -667,12 +781,14 @@
                 <td>
                     <div class="checkbox-group">
                         <label>
-                            <input type="checkbox" name="assignments[${rowIndex}][module_id][]" value="all" onchange="toggleAllCheckboxes(this, 'module_id', ${rowIndex})">
+                            <input type="checkbox" name="modules[${rowIndex}][module_id][]"
+ value="all" onchange="toggleAllCheckboxes(this, 'module_id', ${rowIndex})">
                             All Modules
                         </label>
                         @foreach($modules as $module)
                             <label>
-                                <input type="checkbox" name="assignments[${rowIndex}][module_id][]" value="{{ $module->id }}" onchange="validateCheckboxes(this, 'module_id', ${rowIndex})">
+                                <input type="checkbox" name="modules[${rowIndex}][module_id][]"
+ value="{{ $module->id }}" onchange="validateCheckboxes(this, 'module_id', ${rowIndex})">
                                 {{ $module->name }}
                             </label>
                         @endforeach
@@ -681,12 +797,12 @@
                 <td>
                     <div class="checkbox-group">
                         <label>
-                            <input type="checkbox" name="assignments[${rowIndex}][role_id][]" value="all" onchange="toggleAllCheckboxes(this, 'role_id', ${rowIndex})">
+                            <input type="checkbox" name="modules[${rowIndex}][role_id][]" value="all" onchange="toggleAllCheckboxes(this, 'role_id', ${rowIndex})">
                             All Roles
                         </label>
                         @foreach($roles as $role)
                             <label>
-                                <input type="checkbox" name="assignments[${rowIndex}][role_id][]" value="{{ $role->id }}" onchange="validateCheckboxes(this, 'role_id', ${rowIndex})">
+                                <input type="checkbox" name="modules[${rowIndex}][role_id][]" value="{{ $role->id }}" onchange="validateCheckboxes(this, 'role_id', ${rowIndex})">
                                 {{ $role->name }}
                             </label>
                         @endforeach
@@ -708,7 +824,7 @@
         }
 
         function toggleAllCheckboxes(allCheckbox, field, index) {
-            const checkboxes = allCheckbox.closest('.checkbox-group').querySelectorAll(`input[name^="assignments[${index}][${field}][]"]:not([value="all"])`);
+            const checkboxes = allCheckbox.closest('.checkbox-group').querySelectorAll(`input[name^="modules[${index}][${field}][]"]:not([value="all"])`);
             checkboxes.forEach(checkbox => {
                 checkbox.checked = allCheckbox.checked;
                 checkbox.disabled = allCheckbox.checked;
@@ -716,8 +832,8 @@
         }
 
         function validateCheckboxes(checkbox, field, index) {
-            const allCheckbox = checkbox.closest('.checkbox-group').querySelector(`input[name="assignments[${index}][${field}][]"][value="all"]`);
-            const individualCheckboxes = checkbox.closest('.checkbox-group').querySelectorAll(`input[name^="assignments[${index}][${field}][]"]:not([value="all"])`);
+            const allCheckbox = checkbox.closest('.checkbox-group').querySelector(`input[name="modules[${index}][${field}][]"][value="all"]`);
+            const individualCheckboxes = checkbox.closest('.checkbox-group').querySelectorAll(`input[name^="modules[${index}][${field}][]"]:not([value="all"])`);
             if (checkbox.value !== 'all' && checkbox.checked) {
                 allCheckbox.checked = false;
                 individualCheckboxes.forEach(cb => cb.disabled = false);
@@ -731,17 +847,30 @@
             }
         }
 
+        function toggleEditMode() {
+            const summary = document.getElementById('assignmentsSummary');
+            const editForm = document.getElementById('assignmentsEditForm');
+            
+            if (summary.style.display === 'none') {
+                summary.style.display = 'block';
+                editForm.style.display = 'none';
+            } else {
+                summary.style.display = 'none';
+                editForm.style.display = 'block';
+            }
+        }
+
         document.getElementById('editUserForm').addEventListener('submit', function(e) {
             e.preventDefault();
             const submitBtn = this.querySelector('button[type="submit"]');
             const originalText = submitBtn.innerHTML;
             
             // Validate that each row has at least one selection in each category
-            const rows = document.querySelectorAll('#modulesTable tbody tr');
-            let isValid = true;
-            rows.forEach((row, index) => {
-                ['location', 'module_id', 'role_id'].forEach(field => {
-                    const checkboxes = row.querySelectorAll(`input[name^="assignments[${index}][${field}][]"]`);
+           const rows = document.querySelectorAll('#modulesTable tbody tr');
+let isValid = true;
+rows.forEach((row, index) => {
+    ['location', 'module_id', 'role_id'].forEach(field => {
+        const checkboxes = row.querySelectorAll(`input[name^="modules[${index}][${field}][]"]`);
                     const anyChecked = Array.from(checkboxes).some(cb => cb.checked);
                     if (!anyChecked) {
                         isValid = false;
@@ -764,6 +893,11 @@
                     submitBtn.disabled = false;
                     submitBtn.innerHTML = originalText;
                     hideLoading();
+                    
+                    // Switch back to summary view after successful save
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
                 })
                 .catch(error => {
                     showAlert('error', 'Error', error.response?.data?.message || 'Failed to update user');
