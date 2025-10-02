@@ -3,473 +3,573 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Exception;
 
 class AzureService
 {
+    // Azure Configuration Properties
     private string $tenantId;
     private string $clientId;
     private string $clientSecret;
-    private string $graphBaseUrl;
-    private string $authorityUrl;
+    private string $graphApiBaseUrl;
+    private string $authorityBaseUrl;
+    private string $defaultDomain;
     
+    // Token Management
+    private string $tokenCacheKey;
+    private int $tokenCacheDuration;
+
+    /**
+     * Initialize Azure Service with configuration
+     */
     public function __construct()
     {
         $this->tenantId = config('azure.tenant_id');
         $this->clientId = config('azure.client_id');
         $this->clientSecret = config('azure.client_secret');
-        $this->graphBaseUrl = config('azure.graph_api_base_url');
-        $this->authorityUrl = config('azure.authority_base_url');
+        $this->graphApiBaseUrl = config('azure.graph_api_base_url');
+        $this->authorityBaseUrl = config('azure.authority_base_url');
+        $this->defaultDomain = config('azure.default_domain');
+        $this->tokenCacheKey = config('azure.token_cache_key');
+        $this->tokenCacheDuration = config('azure.token_cache_duration');
+
+        // Validate required configuration
+        $this->validateConfiguration();
     }
 
     /**
-     * Get Azure AD access token (with caching)
+     * Validate that all required Azure configuration is present
+     * 
+     * @throws Exception
+     */
+    private function validateConfiguration(): void
+    {
+        $required = [
+            'tenant_id' => $this->tenantId,
+            'client_id' => $this->clientId,
+            'client_secret' => $this->clientSecret,
+        ];
+
+        $missing = [];
+        foreach ($required as $key => $value) {
+            if (empty($value)) {
+                $missing[] = $key;
+            }
+        }
+
+        if (!empty($missing)) {
+            throw new Exception(
+                'Missing required Azure configuration: ' . implode(', ', $missing)
+            );
+        }
+    }
+
+    /**
+     * Get access token from Azure AD (with caching)
+     * 
+     * @return string
+     * @throws Exception
      */
     public function getAccessToken(): string
     {
-        $cacheKey = 'azure_access_token';
+        // Try to get cached token first
+        $cachedToken = Cache::get($this->tokenCacheKey);
         
-        // Check if we have a cached token
-        if (Cache::has($cacheKey)) {
-            return Cache::get($cacheKey);
+        if ($cachedToken) {
+            Log::channel('azure')->debug('Using cached access token');
+            return $cachedToken;
         }
 
+        // Request new token
         try {
-            $response = Http::asForm()->post("{$this->authorityUrl}/{$this->tenantId}/oauth2/v2.0/token", [
+            $tokenUrl = "{$this->authorityBaseUrl}/{$this->tenantId}/oauth2/v2.0/token";
+            
+            $response = Http::asForm()->post($tokenUrl, [
                 'client_id' => $this->clientId,
                 'client_secret' => $this->clientSecret,
                 'scope' => 'https://graph.microsoft.com/.default',
                 'grant_type' => 'client_credentials',
             ]);
 
-            if ($response->failed()) {
-                Log::error('Azure token request failed', [
-                    'status' => $response->status(),
-                    'body' => $response->body()
-                ]);
-                throw new Exception('Failed to obtain Azure access token: ' . $response->body());
+            if (!$response->successful()) {
+                throw new Exception(
+                    'Failed to obtain access token: ' . $response->body()
+                );
             }
 
             $data = $response->json();
-            $token = $data['access_token'];
-            
-            // Cache token for 55 minutes (tokens typically expire in 60 minutes)
-            Cache::put($cacheKey, $token, now()->addMinutes(55));
-            
-            return $token;
+            $accessToken = $data['access_token'];
+
+            // Cache the token (expires in 55 minutes, actual expiry is 60)
+            Cache::put($this->tokenCacheKey, $accessToken, now()->addMinutes($this->tokenCacheDuration));
+
+            Log::channel('azure')->info('New access token obtained and cached');
+
+            return $accessToken;
 
         } catch (Exception $e) {
-            Log::error('Azure authentication error', ['error' => $e->getMessage()]);
-            throw new Exception('Azure authentication failed: ' . $e->getMessage());
+            Log::channel('azure')->error('Failed to get access token', [
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
         }
     }
 
     /**
-     * Create user in Azure AD
+     * Find a user in Azure AD by User Principal Name (UPN / email).
+     *
+     * @param string $upn
+     * @return array|null
+     * @throws Exception
+     */
+    public function findUserByUPN(string $upn): ?array
+    {
+        try {
+            $accessToken = $this->getAccessToken();
+            
+            $response = Http::withToken($accessToken)
+                ->get($this->graphApiBaseUrl . '/users/' . urlencode($upn));
+
+            if ($response->successful()) {
+                $userData = $response->json();
+                
+                Log::channel('azure')->info('User found in Azure AD', [
+                    'upn' => $upn,
+                    'azure_id' => $userData['id']
+                ]);
+                
+                return [
+                    'id' => $userData['id'],
+                    'userPrincipalName' => $userData['userPrincipalName'],
+                    'displayName' => $userData['displayName'],
+                ];
+            }
+
+            // User not found
+            if ($response->status() === 404) {
+                Log::channel('azure')->info('User not found in Azure AD', ['upn' => $upn]);
+                return null;
+            }
+
+            // Other error
+            throw new Exception("Failed to find user: " . $response->body());
+
+        } catch (Exception $e) {
+            // If Azure returns "not found", handle gracefully
+            if (str_contains($e->getMessage(), 'Request_ResourceNotFound') || 
+                str_contains($e->getMessage(), '404')) {
+                return null;
+            }
+
+            Log::channel('azure')->error('Failed to find user by UPN', [
+                'upn' => $upn,
+                'error' => $e->getMessage()
+            ]);
+
+            throw $e;
+        }
+    }
+
+    /**
+     * Create a new user in Azure AD
      * 
      * @param array $userData
-     * @return array Azure user data
+     * @return array
+     * @throws Exception
      */
     public function createUser(array $userData): array
-{
-    try {
-        $token = $this->getAccessToken();
-        
-        // Generate email formats
-        $primaryEmail = $this->generateEmail($userData['name'], $userData['employee_id']);
-        
-        // ✅ CHECK IF USER ALREADY EXISTS
-        $existingUser = $this->findUserByUPN($primaryEmail);
-        
-        if ($existingUser) {
-            Log::channel('azure')->warning('User already exists in Azure AD, returning existing user', [
-                'upn' => $primaryEmail,
-                'azure_id' => $existingUser['id']
+    {
+        try {
+            $accessToken = $this->getAccessToken();
+            
+            // Generate UPN based on strategy
+            $upn = $this->generateUPN($userData);
+            
+            // Generate temporary password
+            $temporaryPassword = $this->generateSecurePassword();
+            
+            $requestBody = [
+                'accountEnabled' => true,
+                'displayName' => $userData['name'],
+                'mailNickname' => $this->generateMailNickname($userData),
+                'userPrincipalName' => $upn,
+                'passwordProfile' => [
+                    'forceChangePasswordNextSignIn' => config('azure.force_password_change', true),
+                    'password' => $temporaryPassword,
+                ],
+            ];
+            
+            // Optional fields
+            if (!empty($userData['email'])) {
+                $requestBody['mail'] = $userData['email'];
+            }
+            if (!empty($userData['phone'])) {
+                $requestBody['mobilePhone'] = $userData['phone'];
+            }
+            if (!empty($userData['job_title'])) {
+                $requestBody['jobTitle'] = $userData['job_title'];
+            }
+            if (!empty($userData['department'])) {
+                $requestBody['department'] = $userData['department'];
+            }
+            if (!empty($userData['employee_id'])) {
+                $requestBody['employeeId'] = $userData['employee_id'];
+            }
+            
+            $response = Http::withToken($accessToken)
+                ->post($this->graphApiBaseUrl . '/users', $requestBody);
+            
+            if (!$response->successful()) {
+                throw new Exception(
+                    'Failed to create user in Azure AD: ' . $response->body()
+                );
+            }
+            
+            $azureUser = $response->json();
+            
+            Log::channel('azure')->info('User created in Azure AD', [
+                'azure_id' => $azureUser['id'],
+                'upn' => $azureUser['userPrincipalName']
             ]);
             
             return [
-                'azure_id' => $existingUser['id'],
-                'azure_upn' => $existingUser['userPrincipalName'],
-                'azure_display_name' => $existingUser['displayName'],
+                'azure_id' => $azureUser['id'],
+                'azure_upn' => $azureUser['userPrincipalName'],
+                'azure_display_name' => $azureUser['displayName'],
+                'temporary_password' => $temporaryPassword,
             ];
-        }
-        
-        // Continue with user creation only if doesn't exist
-        $mailNickname = $this->generateMailNickname($userData['name']);
-        
-        $azureUserData = [
-            'accountEnabled' => true,
-            'displayName' => $userData['name'],
-            'mailNickname' => $mailNickname,
-            'userPrincipalName' => $primaryEmail,
-            'passwordProfile' => [
-                'forceChangePasswordNextSignIn' => true,
-                'password' => $this->generateSecurePassword()
-            ],
-            'givenName' => $this->getFirstName($userData['name']),
-            'surname' => $this->getLastName($userData['name']),
-            'jobTitle' => $userData['job_title'] ?? 'Employee',
-            'department' => $userData['department'] ?? null,
-            'officeLocation' => $userData['location'] ?? null,
-            'mobilePhone' => $userData['phone'] ?? null,
-            'employeeId' => $userData['employee_id'],
-            'companyName' => $userData['company_name'] ?? null,
-        ];
-
-        Log::channel('azure')->info('Creating new Azure AD user', ['upn' => $primaryEmail]);
-
-        $response = Http::withToken($token)
-            ->post("{$this->graphBaseUrl}/users", $azureUserData);
-
-        if ($response->failed()) {
-            $error = $response->json();
-            Log::channel('azure')->error('Azure user creation failed', [
-                'status' => $response->status(),
-                'error' => $error,
-                'userData' => $azureUserData
+            
+        } catch (Exception $e) {
+            Log::channel('azure')->error('Failed to create user', [
+                'userData' => $userData,
+                'error' => $e->getMessage()
             ]);
-            
-            if ($response->status() === 400 && isset($error['error']['message'])) {
-                throw new Exception('Azure AD Error: ' . $error['error']['message']);
-            }
-            
-            throw new Exception('Failed to create user in Azure AD');
+            throw $e;
         }
-
-        $azureUser = $response->json();
-        
-        Log::channel('azure')->info('Azure AD user created successfully', [
-            'azure_id' => $azureUser['id'],
-            'upn' => $azureUser['userPrincipalName']
-        ]);
-
-        return [
-            'azure_id' => $azureUser['id'],
-            'azure_upn' => $azureUser['userPrincipalName'],
-            'azure_display_name' => $azureUser['displayName'],
-        ];
-
-    } catch (Exception $e) {
-        Log::channel('azure')->error('Azure user creation exception', [
-            'error' => $e->getMessage(),
-            'trace' => $e->getTraceAsString()
-        ]);
-        throw $e;
     }
-}
+
     /**
-     * Update user in Azure AD
+     * Update an existing user in Azure AD
+     * 
+     * @param string $azureId
+     * @param array $updateData
+     * @return bool
+     * @throws Exception
      */
     public function updateUser(string $azureId, array $updateData): bool
     {
         try {
-            $token = $this->getAccessToken();
+            $accessToken = $this->getAccessToken();
             
-            $azureUpdateData = array_filter([
-                'displayName' => $updateData['name'] ?? null,
-                'givenName' => isset($updateData['name']) ? $this->getFirstName($updateData['name']) : null,
-                'surname' => isset($updateData['name']) ? $this->getLastName($updateData['name']) : null,
-                'mobilePhone' => $updateData['phone'] ?? null,
-                'officeLocation' => $updateData['location'] ?? null,
-                'jobTitle' => $updateData['job_title'] ?? null,
-                'department' => $updateData['department'] ?? null,
-            ]);
-
-            $response = Http::withToken($token)
-                ->patch("{$this->graphBaseUrl}/users/{$azureId}", $azureUpdateData);
-
-            if ($response->failed()) {
-                Log::error('Azure user update failed', [
-                    'azure_id' => $azureId,
-                    'status' => $response->status(),
-                    'error' => $response->json()
-                ]);
-                throw new Exception('Failed to update user in Azure AD');
+            $requestBody = [];
+            
+            if (isset($updateData['name'])) {
+                $requestBody['displayName'] = $updateData['name'];
             }
-
-            Log::info('Azure AD user updated', ['azure_id' => $azureId]);
+            if (isset($updateData['phone'])) {
+                $requestBody['mobilePhone'] = $updateData['phone'];
+            }
+            if (isset($updateData['job_title'])) {
+                $requestBody['jobTitle'] = $updateData['job_title'];
+            }
+            if (isset($updateData['department'])) {
+                $requestBody['department'] = $updateData['department'];
+            }
+            
+            if (empty($requestBody)) {
+                return true; // Nothing to update
+            }
+            
+            $response = Http::withToken($accessToken)
+                ->patch($this->graphApiBaseUrl . "/users/{$azureId}", $requestBody);
+            
+            if (!$response->successful()) {
+                throw new Exception(
+                    'Failed to update user in Azure AD: ' . $response->body()
+                );
+            }
+            
+            Log::channel('azure')->info('User updated in Azure AD', [
+                'azure_id' => $azureId
+            ]);
+            
             return true;
-
+            
         } catch (Exception $e) {
-            Log::error('Azure user update exception', ['error' => $e->getMessage()]);
+            Log::channel('azure')->error('Failed to update user', [
+                'azure_id' => $azureId,
+                'error' => $e->getMessage()
+            ]);
             throw $e;
         }
     }
 
     /**
-     * Disable user in Azure AD (blocks sign-in)
+     * Disable a user in Azure AD
+     * 
+     * @param string $azureId
+     * @return bool
+     * @throws Exception
      */
     public function disableUser(string $azureId): bool
     {
         try {
-            $token = $this->getAccessToken();
-
-            $response = Http::withToken($token)
-                ->patch("{$this->graphBaseUrl}/users/{$azureId}", [
+            $accessToken = $this->getAccessToken();
+            
+            $response = Http::withToken($accessToken)
+                ->patch($this->graphApiBaseUrl . "/users/{$azureId}", [
                     'accountEnabled' => false
                 ]);
-
-            if ($response->failed()) {
-                Log::error('Azure user disable failed', [
-                    'azure_id' => $azureId,
-                    'status' => $response->status(),
-                    'error' => $response->json()
-                ]);
-                throw new Exception('Failed to disable user in Azure AD');
+            
+            if (!$response->successful()) {
+                throw new Exception(
+                    'Failed to disable user in Azure AD: ' . $response->body()
+                );
             }
-
-            Log::info('Azure AD user disabled', ['azure_id' => $azureId]);
+            
+            Log::channel('azure')->info('User disabled in Azure AD', [
+                'azure_id' => $azureId
+            ]);
+            
             return true;
-
+            
         } catch (Exception $e) {
-            Log::error('Azure user disable exception', ['error' => $e->getMessage()]);
+            Log::channel('azure')->error('Failed to disable user', [
+                'azure_id' => $azureId,
+                'error' => $e->getMessage()
+            ]);
             throw $e;
         }
     }
 
     /**
-     * Enable user in Azure AD
+     * Enable a user in Azure AD
+     * 
+     * @param string $azureId
+     * @return bool
+     * @throws Exception
      */
     public function enableUser(string $azureId): bool
     {
         try {
-            $token = $this->getAccessToken();
-
-            $response = Http::withToken($token)
-                ->patch("{$this->graphBaseUrl}/users/{$azureId}", [
+            $accessToken = $this->getAccessToken();
+            
+            $response = Http::withToken($accessToken)
+                ->patch($this->graphApiBaseUrl . "/users/{$azureId}", [
                     'accountEnabled' => true
                 ]);
-
-            if ($response->failed()) {
-                Log::error('Azure user enable failed', [
-                    'azure_id' => $azureId,
-                    'status' => $response->status(),
-                    'error' => $response->json()
-                ]);
-                throw new Exception('Failed to enable user in Azure AD');
+            
+            if (!$response->successful()) {
+                throw new Exception(
+                    'Failed to enable user in Azure AD: ' . $response->body()
+                );
             }
-
-            Log::info('Azure AD user enabled', ['azure_id' => $azureId]);
+            
+            Log::channel('azure')->info('User enabled in Azure AD', [
+                'azure_id' => $azureId
+            ]);
+            
             return true;
-
+            
         } catch (Exception $e) {
-            Log::error('Azure user enable exception', ['error' => $e->getMessage()]);
+            Log::channel('azure')->error('Failed to enable user', [
+                'azure_id' => $azureId,
+                'error' => $e->getMessage()
+            ]);
             throw $e;
         }
     }
 
     /**
-     * Delete user from Azure AD (hard delete)
+     * Delete a user from Azure AD
+     * 
+     * @param string $azureId
+     * @return bool
+     * @throws Exception
      */
     public function deleteUser(string $azureId): bool
     {
         try {
-            $token = $this->getAccessToken();
-
-            $response = Http::withToken($token)
-                ->delete("{$this->graphBaseUrl}/users/{$azureId}");
-
-            if ($response->failed()) {
-                Log::error('Azure user deletion failed', [
-                    'azure_id' => $azureId,
-                    'status' => $response->status()
-                ]);
-                throw new Exception('Failed to delete user from Azure AD');
+            $accessToken = $this->getAccessToken();
+            
+            $response = Http::withToken($accessToken)
+                ->delete($this->graphApiBaseUrl . "/users/{$azureId}");
+            
+            if (!$response->successful() && $response->status() !== 404) {
+                throw new Exception(
+                    'Failed to delete user from Azure AD: ' . $response->body()
+                );
             }
-
-            Log::info('Azure AD user deleted', ['azure_id' => $azureId]);
+            
+            Log::channel('azure')->info('User deleted from Azure AD', [
+                'azure_id' => $azureId
+            ]);
+            
             return true;
-
+            
         } catch (Exception $e) {
-            Log::error('Azure user deletion exception', ['error' => $e->getMessage()]);
+            Log::channel('azure')->error('Failed to delete user', [
+                'azure_id' => $azureId,
+                'error' => $e->getMessage()
+            ]);
             throw $e;
         }
     }
 
     /**
-     * Get user from Azure AD
+     * Generate User Principal Name (UPN)
+     * 
+     * @param array $userData
+     * @return string
      */
-    public function getUser(string $azureId): ?array
+    private function generateUPN(array $userData): string
     {
-        try {
-            $token = $this->getAccessToken();
-
-            $response = Http::withToken($token)
-                ->get("{$this->graphBaseUrl}/users/{$azureId}");
-
-            if ($response->failed()) {
-                return null;
-            }
-
-            return $response->json();
-
-        } catch (Exception $e) {
-            Log::error('Azure get user exception', ['error' => $e->getMessage()]);
-            return null;
-        }
-    }
-
-
-    /**
- * Find user by User Principal Name (email)
- */
-public function findUserByUPN(string $upn): ?array
-{
-    try {
-        $token = $this->getAccessToken();
-
-        $response = Http::withToken($token)
-            ->get("{$this->graphBaseUrl}/users/{$upn}");
-
-        if ($response->failed()) {
-            return null;
-        }
-
-        return $response->json();
-
-    } catch (Exception $e) {
-        Log::channel('azure')->error('Azure find user by UPN failed', [
-            'upn' => $upn,
-            'error' => $e->getMessage()
-        ]);
-        return null;
-    }
-}
-
-    /**
-     * Revoke all user sessions (sign out from all devices)
-     */
-    public function revokeUserSessions(string $azureId): bool
-    {
-        try {
-            $token = $this->getAccessToken();
-
-            $response = Http::withToken($token)
-                ->post("{$this->graphBaseUrl}/users/{$azureId}/revokeSignInSessions");
-
-            if ($response->failed()) {
-                Log::error('Azure session revocation failed', [
-                    'azure_id' => $azureId,
-                    'status' => $response->status()
-                ]);
-                throw new Exception('Failed to revoke user sessions');
-            }
-
-            Log::info('Azure AD user sessions revoked', ['azure_id' => $azureId]);
-            return true;
-
-        } catch (Exception $e) {
-            Log::error('Azure session revocation exception', ['error' => $e->getMessage()]);
-            throw $e;
-        }
-    }
-
-    /**
-     * Generate email in format: firstname.lastname@freight-in-time.com
-     * Fallback: employeeID@freight-in-time.com
-     */
-    private function generateEmail(string $name, string $employeeId): string
-    {
-        $domain = config('azure.default_domain', 'freight-in-time.com');  
-              
-        // Clean and format name
-        $nameParts = explode(' ', trim($name));
+        $strategy = config('azure.upn_strategy', 'name_based');
         
-        if (count($nameParts) >= 2) {
-            $firstName = strtolower($nameParts[0]);
-            $lastName = strtolower($nameParts[count($nameParts) - 1]);
-            return "{$firstName}.{$lastName}@{$domain}";
+        if ($strategy === 'name_based') {
+            // firstname.lastname@domain.com
+            $nameParts = explode(' ', strtolower($userData['name']));
+            $firstName = $nameParts[0] ?? 'user';
+            $lastName = end($nameParts);
+            
+            return "{$firstName}.{$lastName}@{$this->defaultDomain}";
         }
         
-        // Fallback to employee ID if name is single word
-        return strtolower($employeeId) . "@{$domain}";
+        // employee_id based: employeeID@domain.com
+        return strtolower($userData['employee_id']) . "@{$this->defaultDomain}";
     }
 
     /**
-     * Generate mail nickname (used for Azure AD)
+     * Generate mail nickname from name
+     * 
+     * @param array $userData
+     * @return string
      */
-    private function generateMailNickname(string $name): string
+    private function generateMailNickname(array $userData): string
     {
-        $cleaned = preg_replace('/[^a-zA-Z0-9]/', '', $name);
-        return strtolower(substr($cleaned, 0, 64));
+        $nameParts = explode(' ', strtolower($userData['name']));
+        $firstName = $nameParts[0] ?? 'user';
+        $lastName = end($nameParts);
+        
+        return "{$firstName}.{$lastName}";
     }
 
     /**
-     * Get first name from full name
-     */
-    private function getFirstName(string $name): string
-    {
-        $parts = explode(' ', trim($name));
-        return $parts[0];
-    }
-
-    /**
-     * Get last name from full name
-     */
-    private function getLastName(string $name): string
-    {
-        $parts = explode(' ', trim($name));
-        return count($parts) > 1 ? $parts[count($parts) - 1] : $parts[0];
-    }
-
-    /**
-     * Generate secure random password
+     * Generate a secure random password
+     * 
+     * @return string
      */
     private function generateSecurePassword(): string
     {
+        $length = config('azure.default_password_length', 16);
+        
         $uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
         $lowercase = 'abcdefghijklmnopqrstuvwxyz';
         $numbers = '0123456789';
-        $special = '!@#$%^&*';
+        $special = '!@#$%^&*()_+-=[]{}|;:,.<>?';
         
         $password = '';
-        $password .= $uppercase[rand(0, strlen($uppercase) - 1)];
-        $password .= $lowercase[rand(0, strlen($lowercase) - 1)];
-        $password .= $numbers[rand(0, strlen($numbers) - 1)];
-        $password .= $special[rand(0, strlen($special) - 1)];
+        $password .= $uppercase[random_int(0, strlen($uppercase) - 1)];
+        $password .= $lowercase[random_int(0, strlen($lowercase) - 1)];
+        $password .= $numbers[random_int(0, strlen($numbers) - 1)];
+        $password .= $special[random_int(0, strlen($special) - 1)];
         
         $allChars = $uppercase . $lowercase . $numbers . $special;
-        for ($i = 4; $i < 16; $i++) {
-            $password .= $allChars[rand(0, strlen($allChars) - 1)];
+        for ($i = 4; $i < $length; $i++) {
+            $password .= $allChars[random_int(0, strlen($allChars) - 1)];
         }
         
         return str_shuffle($password);
     }
 
     /**
-     * Test Azure AD connection
+     * Add user to Azure AD Group
+     * 
+     * @param string $azureUserId
+     * @param string $groupId
+     * @return bool
+     * @throws Exception
      */
-    public function testConnection(): array
+    public function addUserToGroup(string $azureUserId, string $groupId): bool
     {
         try {
-            $token = $this->getAccessToken();
+            $accessToken = $this->getAccessToken();
             
-            $response = Http::withToken($token)
-                ->get("{$this->graphBaseUrl}/organization");
-
-            if ($response->successful()) {
-                $org = $response->json();
-                return [
-                    'success' => true,
-                    'message' => 'Successfully connected to Azure AD',
-                    'organization' => $org['value'][0]['displayName'] ?? 'Unknown'
-                ];
+            $response = Http::withToken($accessToken)
+                ->post($this->graphApiBaseUrl . "/groups/{$groupId}/members/\$ref", [
+                    '@odata.id' => $this->graphApiBaseUrl . "/directoryObjects/{$azureUserId}"
+                ]);
+            
+            // 204 = success, 400 with "already exists" = also OK
+            if ($response->successful() || $response->status() === 204) {
+                Log::channel('azure')->info('User added to group', [
+                    'azure_user_id' => $azureUserId,
+                    'group_id' => $groupId
+                ]);
+                return true;
             }
-
-            return [
-                'success' => false,
-                'message' => 'Failed to connect to Azure AD',
-                'error' => $response->body()
-            ];
-
+            
+            // Check if user is already a member
+            if ($response->status() === 400 && 
+                str_contains($response->body(), 'already exist')) {
+                Log::channel('azure')->info('User already in group', [
+                    'azure_user_id' => $azureUserId,
+                    'group_id' => $groupId
+                ]);
+                return true;
+            }
+            
+            throw new Exception(
+                'Failed to add user to group: ' . $response->body()
+            );
+            
         } catch (Exception $e) {
-            return [
-                'success' => false,
-                'message' => 'Connection test failed',
+            Log::channel('azure')->error('Failed to add user to group', [
+                'azure_user_id' => $azureUserId,
+                'group_id' => $groupId,
                 'error' => $e->getMessage()
-            ];
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * Remove user from Azure AD Group
+     * 
+     * @param string $azureUserId
+     * @param string $groupId
+     * @return bool
+     * @throws Exception
+     */
+    public function removeUserFromGroup(string $azureUserId, string $groupId): bool
+    {
+        try {
+            $accessToken = $this->getAccessToken();
+            
+            $response = Http::withToken($accessToken)
+                ->delete($this->graphApiBaseUrl . "/groups/{$groupId}/members/{$azureUserId}/\$ref");
+            
+            if ($response->successful() || $response->status() === 204 || $response->status() === 404) {
+                Log::channel('azure')->info('User removed from group', [
+                    'azure_user_id' => $azureUserId,
+                    'group_id' => $groupId
+                ]);
+                return true;
+            }
+            
+            throw new Exception(
+                'Failed to remove user from group: ' . $response->body()
+            );
+            
+        } catch (Exception $e) {
+            Log::channel('azure')->error('Failed to remove user from group', [
+                'azure_user_id' => $azureUserId,
+                'group_id' => $groupId,
+                'error' => $e->getMessage()
+            ]);
+            throw $e;
         }
     }
 }

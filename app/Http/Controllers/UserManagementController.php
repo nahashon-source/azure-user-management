@@ -108,15 +108,53 @@ class UserManagementController extends Controller
                     $roleIds = $moduleData['role_id'] ?? [];
                     
                     // Expand "all" into actual values
-                    if (in_array('all', $locations)) {
+                    if (is_array($locations) && in_array('all', $locations)) {
                         $locations = Location::pluck('code')->toArray();
+                    } elseif ($locations === 'all') {
+                        $locations = Location::pluck('code')->toArray();
+                    } elseif (!is_array($locations)) {
+                        $locations = [$locations]; // Convert single value to array
                     }
-                    if (in_array('all', $moduleIds)) {
+                    
+                    if (is_array($moduleIds) && in_array('all', $moduleIds)) {
                         $moduleIds = Module::pluck('id')->toArray();
+                    } elseif ($moduleIds === 'all') {
+                        $moduleIds = Module::pluck('id')->toArray();
+                    } elseif (!is_array($moduleIds)) {
+                        $moduleIds = [$moduleIds];
                     }
-                    if (in_array('all', $roleIds)) {
+                    
+                    if (is_array($roleIds) && in_array('all', $roleIds)) {
                         $roleIds = Role::pluck('id')->toArray();
+                    } elseif ($roleIds === 'all') {
+                        $roleIds = Role::pluck('id')->toArray();
+                    } elseif (!is_array($roleIds)) {
+                        $roleIds = [$roleIds];
+                    }// Expand "all" into actual values
+                    if (is_array($locations) && in_array('all', $locations)) {
+                        $locations = Location::pluck('code')->toArray();
+                    } elseif ($locations === 'all') {
+                        $locations = Location::pluck('code')->toArray();
+                    } elseif (!is_array($locations)) {
+                        $locations = [$locations]; // Convert single value to array
                     }
+                    
+                    if (is_array($moduleIds) && in_array('all', $moduleIds)) {
+                        $moduleIds = Module::pluck('id')->toArray();
+                    } elseif ($moduleIds === 'all') {
+                        $moduleIds = Module::pluck('id')->toArray();
+                    } elseif (!is_array($moduleIds)) {
+                        $moduleIds = [$moduleIds];
+                    }
+                    
+                    if (is_array($roleIds) && in_array('all', $roleIds)) {
+                        $roleIds = Role::pluck('id')->toArray();
+                    } elseif ($roleIds === 'all') {
+                        $roleIds = Role::pluck('id')->toArray();
+                    } elseif (!is_array($roleIds)) {
+                        $roleIds = [$roleIds];
+                    }
+                
                     
                     // Create individual assignments for each combination
                     foreach ($moduleIds as $moduleId) {
@@ -324,16 +362,30 @@ public function edit(User $user)
                     $roleIds = $moduleData['role_id'] ?? [];
                     
                     // Expand "all" into actual values
-                    if (in_array('all', $locations)) {
+                    if (is_array($locations) && in_array('all', $locations)) {
                         $locations = Location::pluck('code')->toArray();
-                    }
-                    if (in_array('all', $moduleIds)) {
-                        $moduleIds = Module::pluck('id')->toArray();
-                    }
-                    if (in_array('all', $roleIds)) {
-                        $roleIds = Role::pluck('id')->toArray();
+                    } elseif ($locations === 'all') {
+                        $locations = Location::pluck('code')->toArray();
+                    } elseif (!is_array($locations)) {
+                        $locations = [$locations]; // Convert single value to array
                     }
                     
+                    if (is_array($moduleIds) && in_array('all', $moduleIds)) {
+                        $moduleIds = Module::pluck('id')->toArray();
+                    } elseif ($moduleIds === 'all') {
+                        $moduleIds = Module::pluck('id')->toArray();
+                    } elseif (!is_array($moduleIds)) {
+                        $moduleIds = [$moduleIds];
+                    }
+                    
+                    if (is_array($roleIds) && in_array('all', $roleIds)) {
+                        $roleIds = Role::pluck('id')->toArray();
+                    } elseif ($roleIds === 'all') {
+                        $roleIds = Role::pluck('id')->toArray();
+                    } elseif (!is_array($roleIds)) {
+                        $roleIds = [$roleIds];
+                    }
+                                        
                     // Create individual assignments for each combination
                     foreach ($moduleIds as $moduleId) {
                         foreach ($roleIds as $roleId) {
