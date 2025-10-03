@@ -23,42 +23,6 @@ class UserProvisioningService
     }
 
     /**
- * Find a user in Azure AD by User Principal Name (UPN / email).
- *
- * @param string $upn
- * @return array|null
- * @throws \Exception
- */
-// public function findUserByUPN(string $upn): ?array
-// {
-//     try {
-//         // Query Microsoft Graph for the user by UPN
-//         $response = $this->graphClient
-//             ->createRequest('GET', '/users/' . urlencode($upn))
-//             ->setReturnType(\Microsoft\Graph\Model\User::class)
-//             ->execute();
-
-//         if ($response) {
-//             return [
-//                 'id'               => $response->getId(),
-//                 'userPrincipalName'=> $response->getUserPrincipalName(),
-//                 'displayName'      => $response->getDisplayName(),
-//             ];
-//         }
-
-//         return null;
-//     } catch (\Exception $e) {
-//         // If Azure returns "not found", handle gracefully
-//         if (str_contains($e->getMessage(), 'Request_ResourceNotFound')) {
-//             return null;
-//         }
-
-//         throw $e;
-//     }
-// }
-
-
-    /**
      * Provision a new user (create in local DB + Azure + assign modules)
      * 
      * @param array $userData User information
@@ -79,7 +43,7 @@ class UserProvisioningService
         DB::beginTransaction();
 
         try {
-            // Step 1: Create user in local database
+            // Step 1: Create user in local database with 'active' status (optimistic)
             $user = $this->createLocalUser($userData);
             $results['user'] = $user;
 
@@ -89,95 +53,111 @@ class UserProvisioningService
                 'modules_count' => count($moduleAssignments)
             ]);
 
-           // Step 2: Create or update user in Azure AD
-try {
-    if ($user->azure_id) {
-        // Already linked → update existing Azure user
-        $this->azureService->updateUser($user->azure_id, [
-            'name'       => $user->name,
-            'email'      => $user->email,
-            'phone'      => $user->phone,
-            'job_title'  => $user->job_title,
-            'department' => $user->department,
-        ]);
+            // Step 2: Create or update user in Azure AD
+            try {
+                if ($user->azure_id) {
+                    // Already linked → update existing Azure user
+                    $this->azureService->updateUser($user->azure_id, [
+                        'name'       => $user->name,
+                        'email'      => $user->email,
+                        'phone'      => $user->phone,
+                        'job_title'  => $user->job_title,
+                        'department' => $user->department,
+                    ]);
 
-        $results['azure'] = [
-            'success' => true,
-            'azure_id' => $user->azure_id,
-            'azure_upn' => $user->azure_upn
-        ];
+                    $results['azure'] = [
+                        'success' => true,
+                        'azure_id' => $user->azure_id,
+                        'azure_upn' => $user->azure_upn
+                    ];
 
-        Log::channel('provisioning')->info('User updated in Azure AD', [
-            'user_id' => $user->id,
-            'azure_id' => $user->azure_id
-        ]);
-    } else {
-        // Try creating a new Azure user
-        $azureData = $this->azureService->createUser([
-            'name'        => $user->name,
-            'employee_id' => $user->employee_id,
-            'email'       => $user->email,
-            'phone'       => $user->phone,
-            'job_title'   => $user->job_title,
-            'department'  => $user->department,
-            'company_name'=> $user->company->name ?? null,
-        ]);
+                    Log::channel('provisioning')->info('User updated in Azure AD', [
+                        'user_id' => $user->id,
+                        'azure_id' => $user->azure_id
+                    ]);
+                } else {
+                    // Try creating a new Azure user
+                    $azureData = $this->azureService->createUser([
+                        'name'        => $user->name,
+                        'employee_id' => $user->employee_id,
+                        'email'       => $user->email,
+                        'phone'       => $user->phone,
+                        'job_title'   => $user->job_title,
+                        'department'  => $user->department,
+                        'company_name'=> $user->company->name ?? null,
+                    ]);
 
-        $user->update([
-            'azure_id'          => $azureData['azure_id'],
-            'azure_upn'         => $azureData['azure_upn'],
-            'azure_display_name'=> $azureData['azure_display_name'],
-            'status'            => 'active',
-        ]);
+                    $user->update([
+                        'azure_id'          => $azureData['azure_id'],
+                        'azure_upn'         => $azureData['azure_upn'],
+                        'azure_display_name'=> $azureData['azure_display_name'],
+                        'status'            => 'active',
+                    ]);
 
-        $results['azure'] = [
-            'success'  => true,
-            'azure_id' => $azureData['azure_id'],
-            'azure_upn'=> $azureData['azure_upn']
-        ];
+                    $results['azure'] = [
+                        'success'  => true,
+                        'azure_id' => $azureData['azure_id'],
+                        'azure_upn'=> $azureData['azure_upn']
+                    ];
 
-        Log::channel('provisioning')->info('User created in Azure AD', [
-            'user_id' => $user->id,
-            'azure_id' => $azureData['azure_id']
-        ]);
-    }
-} catch (Exception $e) {
-    if (str_contains($e->getMessage(), 'userPrincipalName already exists')) {
-        // Conflict → find and link existing Azure user
-        $existing = $this->azureService->findUserByUPN($user->email);
+                    Log::channel('provisioning')->info('User created in Azure AD', [
+                        'user_id' => $user->id,
+                        'azure_id' => $azureData['azure_id']
+                    ]);
+                }
+            } catch (Exception $e) {
+                // Handle Azure provisioning failures
+                if (str_contains($e->getMessage(), 'userPrincipalName already exists')) {
+                    // Conflict → try to find and link existing Azure user
+                    $existing = $this->azureService->findUserByUPN($user->email);
 
-        if ($existing) {
-            $user->update([
-                'azure_id'          => $existing['id'],
-                'azure_upn'         => $existing['userPrincipalName'],
-                'azure_display_name'=> $existing['displayName'],
-                'status'            => 'active',
-            ]);
+                    if ($existing) {
+                        $user->update([
+                            'azure_id'          => $existing['id'],
+                            'azure_upn'         => $existing['userPrincipalName'],
+                            'azure_display_name'=> $existing['displayName'],
+                            'status'            => 'active',
+                        ]);
 
-            $results['azure'] = [
-                'success'  => true,
-                'azure_id' => $existing['id'],
-                'azure_upn'=> $existing['userPrincipalName']
-            ];
+                        $results['azure'] = [
+                            'success'  => true,
+                            'azure_id' => $existing['id'],
+                            'azure_upn'=> $existing['userPrincipalName']
+                        ];
 
-            Log::channel('provisioning')->info('Linked to existing Azure user', [
-                'user_id' => $user->id,
-                'azure_id' => $existing['id']
-            ]);
-        } else {
-            $results['azure'] = ['success' => false, 'error' => $e->getMessage()];
-            $results['errors'][] = "Azure provisioning failed: " . $e->getMessage();
-            DB::rollBack();
-            return $results;
-        }
-    } else {
-        $results['azure'] = ['success' => false, 'error' => $e->getMessage()];
-        $results['errors'][] = "Azure provisioning failed: " . $e->getMessage();
-        DB::rollBack();
-        return $results;
-    }
-}
-
+                        Log::channel('provisioning')->info('Linked to existing Azure user', [
+                            'user_id' => $user->id,
+                            'azure_id' => $existing['id']
+                        ]);
+                    } else {
+                        // Could not find or link existing user → mark as pending for retry
+                        $user->update(['status' => 'pending']);
+                        $results['azure'] = ['success' => false, 'error' => $e->getMessage()];
+                        $results['errors'][] = "Azure provisioning failed: " . $e->getMessage();
+                        
+                        Log::channel('provisioning')->error('Azure user exists but could not be linked', [
+                            'user_id' => $user->id,
+                            'error' => $e->getMessage()
+                        ]);
+                        
+                        DB::rollBack();
+                        return $results;
+                    }
+                } else {
+                    // Other Azure errors → mark as pending for retry
+                    $user->update(['status' => 'pending']);
+                    $results['azure'] = ['success' => false, 'error' => $e->getMessage()];
+                    $results['errors'][] = "Azure provisioning failed: " . $e->getMessage();
+                    
+                    Log::channel('provisioning')->error('Azure provisioning failed', [
+                        'user_id' => $user->id,
+                        'error' => $e->getMessage()
+                    ]);
+                    
+                    DB::rollBack();
+                    return $results;
+                }
+            }
 
             // Step 3: Assign modules (Azure Groups + App Roles + External APIs)
             $moduleResults = $this->assignModules($user, $moduleAssignments);
@@ -226,33 +206,122 @@ try {
     }
 
     /**
+     * Retry provisioning for pending users
+     * Call this from a scheduled command or manually
+     * 
+     * @return array Retry results with counts and details
+     */
+    public function retryPendingUsers(): array
+    {
+        $pendingUsers = User::where('status', 'pending')
+            ->whereNull('azure_id')
+            ->get();
+        
+        $results = [
+            'total' => $pendingUsers->count(),
+            'succeeded' => 0,
+            'failed' => 0,
+            'details' => []
+        ];
+        
+        Log::channel('provisioning')->info('Starting retry for pending users', [
+            'pending_count' => $pendingUsers->count()
+        ]);
+        
+        foreach ($pendingUsers as $user) {
+            try {
+                // Get user's module assignments
+                $moduleAssignments = $user->modules->map(function ($module) {
+                    return [
+                        'module_id' => $module->id,
+                        'role_id' => $module->pivot->role_id,
+                        'location' => $module->pivot->location,
+                    ];
+                })->toArray();
+                
+                // Retry provisioning
+                $result = $this->provisionUser([
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'employee_id' => $user->employee_id,
+                    'phone' => $user->phone,
+                    'location' => $user->location,
+                    'job_title' => $user->job_title,
+                    'department' => $user->department,
+                    'company_id' => $user->company_id,
+                ], $moduleAssignments);
+                
+                if ($result['success']) {
+                    $results['succeeded']++;
+                    Log::channel('provisioning')->info('Retry succeeded', [
+                        'user_id' => $user->id,
+                        'employee_id' => $user->employee_id
+                    ]);
+                } else {
+                    $results['failed']++;
+                    Log::channel('provisioning')->warning('Retry failed', [
+                        'user_id' => $user->id,
+                        'employee_id' => $user->employee_id,
+                        'errors' => $result['errors']
+                    ]);
+                }
+                
+                $results['details'][] = [
+                    'user_id' => $user->id,
+                    'employee_id' => $user->employee_id,
+                    'name' => $user->name,
+                    'result' => $result
+                ];
+                
+            } catch (Exception $e) {
+                $results['failed']++;
+                $results['details'][] = [
+                    'user_id' => $user->id,
+                    'employee_id' => $user->employee_id,
+                    'name' => $user->name,
+                    'error' => $e->getMessage()
+                ];
+                
+                Log::channel('provisioning')->error('Retry exception', [
+                    'user_id' => $user->id,
+                    'error' => $e->getMessage()
+                ]);
+            }
+        }
+        
+        Log::channel('provisioning')->info('Retry pending users completed', $results);
+        
+        return $results;
+    }
+
+    /**
      * Create user record in local database
      */
-private function createLocalUser(array $userData): User
-{
-    $user = User::updateOrCreate(
-        ['employee_id' => $userData['employee_id']], // lookup key
-        [
-            'name'       => $userData['name'],
-            'email'      => $userData['email'],
-            'phone'      => $userData['phone'] ?? null,
-            'location'   => $userData['location'] ?? null,
-            'job_title'  => $userData['job_title'] ?? null,
-            'department' => $userData['department'] ?? null,
-            'company_id' => $userData['company_id'],
-            'password'   => bcrypt(\Illuminate\Support\Str::random(32)),
-            'status'     => 'pending', // will be set to active after Azure provisioning
-        ]
-    );
+    private function createLocalUser(array $userData): User
+    {
+        $user = User::updateOrCreate(
+            ['employee_id' => $userData['employee_id']], // lookup key
+            [
+                'name'       => $userData['name'],
+                'email'      => $userData['email'],
+                'phone'      => $userData['phone'] ?? null,
+                'location'   => $userData['location'] ?? null,
+                'job_title'  => $userData['job_title'] ?? null,
+                'department' => $userData['department'] ?? null,
+                'company_id' => $userData['company_id'],
+                'password'   => bcrypt(\Illuminate\Support\Str::random(32)),
+                'status'     => 'active', // Optimistic - assume Azure will succeed
+            ]
+        );
 
-    Log::channel('provisioning')->info('Local user record created/updated', [
-        'user_id'     => $user->id,
-        'employee_id' => $user->employee_id,
-        'action'      => $user->wasRecentlyCreated ? 'created' : 'updated'
-    ]);
+        Log::channel('provisioning')->info('Local user record created/updated', [
+            'user_id'     => $user->id,
+            'employee_id' => $user->employee_id,
+            'action'      => $user->wasRecentlyCreated ? 'created' : 'updated'
+        ]);
 
-    return $user;
-}
+        return $user;
+    }
 
     /**
      * Assign all modules to user
@@ -580,53 +649,52 @@ private function createLocalUser(array $userData): User
     /**
      * Bulk provision users
      */
-   public function bulkProvisionUsers(array $usersData): array
-{
-    $results = [
-        'total' => count($usersData),
-        'successful' => 0,
-        'failed' => 0,
-        'partial' => 0,
-        'created' => 0,
-        'updated' => 0,
-        'details' => []
-    ];
-
-    foreach ($usersData as $userData) {
-        $moduleAssignments = $userData['modules'] ?? [];
-        unset($userData['modules']);
-
-        $result = $this->provisionUser($userData, $moduleAssignments);
-
-        if ($result['user']) {
-            if ($result['user']->wasRecentlyCreated) {
-                $results['created']++;
-            } else {
-                $results['updated']++;
-            }
-        }
-
-        if ($result['success']) {
-            if ($result['partial_failure']) {
-                $results['partial']++;
-            } else {
-                $results['successful']++;
-            }
-        } else {
-            $results['failed']++;
-        }
-
-        $results['details'][] = [
-            'employee_id' => $userData['employee_id'],
-            'name' => $userData['name'],
-            'action' => $result['user']->wasRecentlyCreated ? 'created' : 'updated',
-            'result' => $result
+    public function bulkProvisionUsers(array $usersData): array
+    {
+        $results = [
+            'total' => count($usersData),
+            'successful' => 0,
+            'failed' => 0,
+            'partial' => 0,
+            'created' => 0,
+            'updated' => 0,
+            'details' => []
         ];
+
+        foreach ($usersData as $userData) {
+            $moduleAssignments = $userData['modules'] ?? [];
+            unset($userData['modules']);
+
+            $result = $this->provisionUser($userData, $moduleAssignments);
+
+            if ($result['user']) {
+                if ($result['user']->wasRecentlyCreated) {
+                    $results['created']++;
+                } else {
+                    $results['updated']++;
+                }
+            }
+
+            if ($result['success']) {
+                if ($result['partial_failure']) {
+                    $results['partial']++;
+                } else {
+                    $results['successful']++;
+                }
+            } else {
+                $results['failed']++;
+            }
+
+            $results['details'][] = [
+                'employee_id' => $userData['employee_id'],
+                'name' => $userData['name'],
+                'action' => $result['user']->wasRecentlyCreated ? 'created' : 'updated',
+                'result' => $result
+            ];
+        }
+
+        Log::channel('provisioning')->info('Bulk provisioning completed', $results);
+
+        return $results;
     }
-
-    Log::channel('provisioning')->info('Bulk provisioning completed', $results);
-
-    return $results;
-}
-
 }

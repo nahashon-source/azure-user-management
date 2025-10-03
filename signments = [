@@ -1,0 +1,11 @@
+[90m= [39m[
+    "[34mname[39m" => "[32mTest User[39m",
+    "[34memail[39m" => "[32mtestuser@freight-in-time.com[39m",
+    "[34memployee_id[39m" => "[32mTEST001[39m",
+    "[34mphone[39m" => "[32m+254700000000[39m",
+    "[34mlocation[39m" => "[32mNairobi[39m",
+    "[34mjob_title[39m" => "[32mTest Engineer[39m",
+    "[34mdepartment[39m" => "[32mIT[39m",
+    "[34mcompany_id[39m" => [35m1[39m,
+  ]
+

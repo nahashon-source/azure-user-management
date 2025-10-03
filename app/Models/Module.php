@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Log;
 
 class Module extends Model
 {
@@ -125,7 +126,7 @@ class Module extends Model
             $decrypted = Crypt::decryptString($this->api_credentials);
             return json_decode($decrypted, true);
         } catch (\Exception $e) {
-            \Log::error("Failed to decrypt API credentials for module {$this->code}", [
+            Log::error("Failed to decrypt API credentials for module {$this->code}", [
                 'error' => $e->getMessage()
             ]);
             return null;

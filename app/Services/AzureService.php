@@ -67,6 +67,120 @@ class AzureService
     }
 
     /**
+     * Make HTTP request with retry logic and exponential backoff
+     * 
+     * @param string $method HTTP method (GET, POST, PATCH, DELETE)
+     * @param string $url Full URL to call
+     * @param array|null $data Request body data
+     * @param int $maxRetries Maximum number of retry attempts
+     * @return \Illuminate\Http\Client\Response
+     * @throws Exception
+     */
+    private function makeRequestWithRetry(string $method, string $url, ?array $data = null, int $maxRetries = 3)
+    {
+        $attempt = 0;
+        $lastException = null;
+        
+        while ($attempt < $maxRetries) {
+            try {
+                $token = $this->getAccessToken();
+                $request = Http::withToken($token)->timeout(30);
+                
+                $response = match(strtoupper($method)) {
+                    'GET' => $request->get($url),
+                    'POST' => $request->post($url, $data ?? []),
+                    'PATCH' => $request->patch($url, $data ?? []),
+                    'DELETE' => $request->delete($url),
+                    default => throw new Exception("Unsupported HTTP method: {$method}")
+                };
+                
+                // Success - return response
+                if ($response->successful()) {
+                    if ($attempt > 0) {
+                        Log::channel('azure')->info('Request succeeded after retry', [
+                            'method' => $method,
+                            'url' => $url,
+                            'attempts' => $attempt + 1
+                        ]);
+                    }
+                    return $response;
+                }
+                
+                // Rate limited (429) - wait and retry
+                if ($response->status() === 429) {
+                    $retryAfter = $response->header('Retry-After') ?? (2 ** $attempt);
+                    
+                    Log::channel('azure')->warning('Rate limited, retrying', [
+                        'method' => $method,
+                        'url' => $url,
+                        'attempt' => $attempt + 1,
+                        'retry_after' => $retryAfter
+                    ]);
+                    
+                    sleep((int)$retryAfter);
+                    $attempt++;
+                    continue;
+                }
+                
+                // Server errors (5xx) - retry with backoff
+                if ($response->status() >= 500) {
+                    $attempt++;
+                    
+                    if ($attempt < $maxRetries) {
+                        $backoffSeconds = 2 ** ($attempt - 1);
+                        
+                        Log::channel('azure')->warning('Server error, retrying', [
+                            'method' => $method,
+                            'url' => $url,
+                            'status' => $response->status(),
+                            'attempt' => $attempt,
+                            'backoff_seconds' => $backoffSeconds
+                        ]);
+                        
+                        sleep($backoffSeconds);
+                        continue;
+                    }
+                }
+                
+                // Client errors (4xx) or max retries reached - throw exception
+                throw new Exception("HTTP {$response->status()}: {$response->body()}");
+                
+            } catch (Exception $e) {
+                $lastException = $e;
+                $attempt++;
+                
+                // Don't retry for client errors (except 429 which is handled above)
+                if (str_contains($e->getMessage(), 'HTTP 4')) {
+                    throw $e;
+                }
+                
+                if ($attempt < $maxRetries) {
+                    $backoffSeconds = 2 ** ($attempt - 1);
+                    
+                    Log::channel('azure')->warning('Request failed, retrying', [
+                        'method' => $method,
+                        'url' => $url,
+                        'attempt' => $attempt,
+                        'error' => $e->getMessage(),
+                        'backoff_seconds' => $backoffSeconds
+                    ]);
+                    
+                    sleep($backoffSeconds);
+                } else {
+                    Log::channel('azure')->error('Request failed after all retries', [
+                        'method' => $method,
+                        'url' => $url,
+                        'attempts' => $maxRetries,
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+        }
+        
+        throw $lastException ?? new Exception('Request failed after all retries');
+    }
+
+    /**
      * Get access token from Azure AD (with caching)
      * 
      * @return string
@@ -127,10 +241,10 @@ class AzureService
     public function findUserByUPN(string $upn): ?array
     {
         try {
-            $accessToken = $this->getAccessToken();
-            
-            $response = Http::withToken($accessToken)
-                ->get($this->graphApiBaseUrl . '/users/' . urlencode($upn));
+            $response = $this->makeRequestWithRetry(
+                'GET',
+                $this->graphApiBaseUrl . '/users/' . urlencode($upn)
+            );
 
             if ($response->successful()) {
                 $userData = $response->json();
@@ -147,19 +261,13 @@ class AzureService
                 ];
             }
 
-            // User not found
-            if ($response->status() === 404) {
-                Log::channel('azure')->info('User not found in Azure AD', ['upn' => $upn]);
-                return null;
-            }
-
-            // Other error
-            throw new Exception("Failed to find user: " . $response->body());
+            return null;
 
         } catch (Exception $e) {
             // If Azure returns "not found", handle gracefully
             if (str_contains($e->getMessage(), 'Request_ResourceNotFound') || 
-                str_contains($e->getMessage(), '404')) {
+                str_contains($e->getMessage(), 'HTTP 404')) {
+                Log::channel('azure')->info('User not found in Azure AD', ['upn' => $upn]);
                 return null;
             }
 
@@ -182,8 +290,6 @@ class AzureService
     public function createUser(array $userData): array
     {
         try {
-            $accessToken = $this->getAccessToken();
-            
             // Generate UPN based on strategy
             $upn = $this->generateUPN($userData);
             
@@ -218,8 +324,11 @@ class AzureService
                 $requestBody['employeeId'] = $userData['employee_id'];
             }
             
-            $response = Http::withToken($accessToken)
-                ->post($this->graphApiBaseUrl . '/users', $requestBody);
+            $response = $this->makeRequestWithRetry(
+                'POST',
+                $this->graphApiBaseUrl . '/users',
+                $requestBody
+            );
             
             if (!$response->successful()) {
                 throw new Exception(
@@ -261,8 +370,6 @@ class AzureService
     public function updateUser(string $azureId, array $updateData): bool
     {
         try {
-            $accessToken = $this->getAccessToken();
-            
             $requestBody = [];
             
             if (isset($updateData['name'])) {
@@ -282,8 +389,11 @@ class AzureService
                 return true; // Nothing to update
             }
             
-            $response = Http::withToken($accessToken)
-                ->patch($this->graphApiBaseUrl . "/users/{$azureId}", $requestBody);
+            $response = $this->makeRequestWithRetry(
+                'PATCH',
+                $this->graphApiBaseUrl . "/users/{$azureId}",
+                $requestBody
+            );
             
             if (!$response->successful()) {
                 throw new Exception(
@@ -316,12 +426,11 @@ class AzureService
     public function disableUser(string $azureId): bool
     {
         try {
-            $accessToken = $this->getAccessToken();
-            
-            $response = Http::withToken($accessToken)
-                ->patch($this->graphApiBaseUrl . "/users/{$azureId}", [
-                    'accountEnabled' => false
-                ]);
+            $response = $this->makeRequestWithRetry(
+                'PATCH',
+                $this->graphApiBaseUrl . "/users/{$azureId}",
+                ['accountEnabled' => false]
+            );
             
             if (!$response->successful()) {
                 throw new Exception(
@@ -354,12 +463,11 @@ class AzureService
     public function enableUser(string $azureId): bool
     {
         try {
-            $accessToken = $this->getAccessToken();
-            
-            $response = Http::withToken($accessToken)
-                ->patch($this->graphApiBaseUrl . "/users/{$azureId}", [
-                    'accountEnabled' => true
-                ]);
+            $response = $this->makeRequestWithRetry(
+                'PATCH',
+                $this->graphApiBaseUrl . "/users/{$azureId}",
+                ['accountEnabled' => true]
+            );
             
             if (!$response->successful()) {
                 throw new Exception(
@@ -392,10 +500,10 @@ class AzureService
     public function deleteUser(string $azureId): bool
     {
         try {
-            $accessToken = $this->getAccessToken();
-            
-            $response = Http::withToken($accessToken)
-                ->delete($this->graphApiBaseUrl . "/users/{$azureId}");
+            $response = $this->makeRequestWithRetry(
+                'DELETE',
+                $this->graphApiBaseUrl . "/users/{$azureId}"
+            );
             
             if (!$response->successful() && $response->status() !== 404) {
                 throw new Exception(
@@ -410,6 +518,11 @@ class AzureService
             return true;
             
         } catch (Exception $e) {
+            // 404 is acceptable - user already deleted
+            if (str_contains($e->getMessage(), 'HTTP 404')) {
+                return true;
+            }
+            
             Log::channel('azure')->error('Failed to delete user', [
                 'azure_id' => $azureId,
                 'error' => $e->getMessage()
@@ -495,26 +608,15 @@ class AzureService
     public function addUserToGroup(string $azureUserId, string $groupId): bool
     {
         try {
-            $accessToken = $this->getAccessToken();
-            
-            $response = Http::withToken($accessToken)
-                ->post($this->graphApiBaseUrl . "/groups/{$groupId}/members/\$ref", [
-                    '@odata.id' => $this->graphApiBaseUrl . "/directoryObjects/{$azureUserId}"
-                ]);
+            $response = $this->makeRequestWithRetry(
+                'POST',
+                $this->graphApiBaseUrl . "/groups/{$groupId}/members/\$ref",
+                ['@odata.id' => $this->graphApiBaseUrl . "/directoryObjects/{$azureUserId}"]
+            );
             
             // 204 = success, 400 with "already exists" = also OK
             if ($response->successful() || $response->status() === 204) {
                 Log::channel('azure')->info('User added to group', [
-                    'azure_user_id' => $azureUserId,
-                    'group_id' => $groupId
-                ]);
-                return true;
-            }
-            
-            // Check if user is already a member
-            if ($response->status() === 400 && 
-                str_contains($response->body(), 'already exist')) {
-                Log::channel('azure')->info('User already in group', [
                     'azure_user_id' => $azureUserId,
                     'group_id' => $groupId
                 ]);
@@ -526,6 +628,15 @@ class AzureService
             );
             
         } catch (Exception $e) {
+            // Check if user is already a member
+            if (str_contains($e->getMessage(), 'already exist')) {
+                Log::channel('azure')->info('User already in group', [
+                    'azure_user_id' => $azureUserId,
+                    'group_id' => $groupId
+                ]);
+                return true;
+            }
+            
             Log::channel('azure')->error('Failed to add user to group', [
                 'azure_user_id' => $azureUserId,
                 'group_id' => $groupId,
@@ -546,10 +657,10 @@ class AzureService
     public function removeUserFromGroup(string $azureUserId, string $groupId): bool
     {
         try {
-            $accessToken = $this->getAccessToken();
-            
-            $response = Http::withToken($accessToken)
-                ->delete($this->graphApiBaseUrl . "/groups/{$groupId}/members/{$azureUserId}/\$ref");
+            $response = $this->makeRequestWithRetry(
+                'DELETE',
+                $this->graphApiBaseUrl . "/groups/{$groupId}/members/{$azureUserId}/\$ref"
+            );
             
             if ($response->successful() || $response->status() === 204 || $response->status() === 404) {
                 Log::channel('azure')->info('User removed from group', [
@@ -564,6 +675,11 @@ class AzureService
             );
             
         } catch (Exception $e) {
+            // 404 is acceptable - user already removed
+            if (str_contains($e->getMessage(), 'HTTP 404')) {
+                return true;
+            }
+            
             Log::channel('azure')->error('Failed to remove user from group', [
                 'azure_user_id' => $azureUserId,
                 'group_id' => $groupId,
