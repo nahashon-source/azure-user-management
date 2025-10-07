@@ -204,4 +204,41 @@ class Module extends Model
             default => 'badge-secondary',
         };
     }
+
+    /**
+ * Get the Azure group ID for a specific role
+ */
+public function getAzureGroupForRole(int $roleId): ?array
+{
+    $mapping = ModuleRoleGroup::where('module_id', $this->id)
+        ->where('role_id', $roleId)
+        ->first();
+    
+    if (!$mapping) {
+        return null;
+    }
+    
+    return [
+        'group_id' => $mapping->azure_group_id,
+        'group_name' => $mapping->azure_group_name,
+    ];
+}
+
+/**
+ * Check if this module has a mapping for a specific role
+ */
+public function hasRoleMapping(int $roleId): bool
+{
+    return ModuleRoleGroup::where('module_id', $this->id)
+        ->where('role_id', $roleId)
+        ->exists();
+}
+
+/**
+ * Get all role mappings for this module
+ */
+public function roleGroups()
+{
+    return $this->hasMany(ModuleRoleGroup::class);
+}
 }

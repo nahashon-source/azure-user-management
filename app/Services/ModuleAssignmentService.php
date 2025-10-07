@@ -144,57 +144,101 @@ class ModuleAssignmentService
     /**
      * Assign user to Azure AD Security Group
      */
-    private function assignToAzureGroup(User $user, Module $module, UserModule $userModule): array
-    {
-        try {
-            if (!$module->hasAzureGroupConfigured()) {
-                throw new Exception("Module {$module->code} does not have Azure Group ID configured");
-            }
+ 
 
-            if (!$user->isProvisionedToAzure()) {
-                throw new Exception("User {$user->name} is not provisioned to Azure AD");
-            }
+    /**
+ * Assign user to Azure AD Security Group (role-based)
+ */
+private function assignToAzureGroup(User $user, Module $module, UserModule $userModule): array
+{
+    try {
+        // Get the correct Azure group based on the user's role
+        $roleId = $userModule->role_id;
+        $groupInfo = $module->getAzureGroupForRole($roleId);
 
-            $token = $this->azureService->getAccessToken();
-            $graphUrl = config('azure.graph_api_base_url');
+        if (!$groupInfo) {
+            throw new Exception("No Azure group mapping found for module '{$module->name}' and role ID {$roleId}");
+        }
 
-            $response = Http::withToken($token)
-                ->post("{$graphUrl}/groups/{$module->azure_group_id}/members/\$ref", [
-                    '@odata.id' => "{$graphUrl}/directoryObjects/{$user->azure_id}"
+        if (!$user->isProvisionedToAzure()) {
+            throw new Exception("User {$user->name} is not provisioned to Azure AD");
+        }
+
+        $azureGroupId = $groupInfo['group_id'];
+        $azureGroupName = $groupInfo['group_name'];
+
+        $token = $this->azureService->getAccessToken();
+        $graphUrl = config('azure.graph_api_base_url');
+
+        Log::channel('azure')->info('Attempting Azure group assignment', [
+            'user_id' => $user->id,
+            'user_name' => $user->name,
+            'module' => $module->name,
+            'role_id' => $roleId,
+            'azure_group_id' => $azureGroupId,
+            'azure_group_name' => $azureGroupName
+        ]);
+
+        $response = Http::withToken($token)
+            ->post("{$graphUrl}/groups/{$azureGroupId}/members/\$ref", [
+                '@odata.id' => "{$graphUrl}/directoryObjects/{$user->azure_id}"
+            ]);
+
+        if ($response->failed()) {
+            // Check if already a member (409 conflict)
+            if ($response->status() === 409) {
+                Log::channel('azure')->info('User already member of Azure Group', [
+                    'user_id' => $user->id,
+                    'group_id' => $azureGroupId,
+                    'group_name' => $azureGroupName
                 ]);
-
-            if ($response->failed()) {
-                // Check if already a member (409 conflict)
-                if ($response->status() === 409) {
-                    Log::channel('azure')->info('User already member of Azure Group', [
-                        'user_id' => $user->id,
-                        'group_id' => $module->azure_group_id
-                    ]);
-                    return ['success' => true, 'status' => 'already_member'];
-                }
-
-                throw new Exception("Failed to add user to Azure Group: " . $response->body());
+                return ['success' => true, 'status' => 'already_member', 'group_name' => $azureGroupName];
             }
 
-            Log::channel('azure')->info('User added to Azure Group', [
+                // Handle "already exists" error from Microsoft Graph API
+    if ($response->status() === 400) {
+        $errorBody = $response->json();
+        if (isset($errorBody['error']['message']) && 
+            str_contains($errorBody['error']['message'], 'already exist')) {
+            Log::channel('azure')->info('User already member of Azure Group (400)', [
                 'user_id' => $user->id,
-                'azure_id' => $user->azure_id,
-                'group_id' => $module->azure_group_id,
-                'module' => $module->code
+                'group_id' => $azureGroupId,
+                'group_name' => $azureGroupName
             ]);
-
-            return ['success' => true, 'status' => 'assigned'];
-
-        } catch (Exception $e) {
-            Log::channel('azure')->error('Azure Group assignment failed', [
-                'user_id' => $user->id,
-                'module_id' => $module->id,
-                'error' => $e->getMessage()
-            ]);
-
-            return ['success' => false, 'error' => $e->getMessage()];
+            return ['success' => true, 'status' => 'already_member', 'group_name' => $azureGroupName];
         }
     }
+
+            throw new Exception("Failed to add user to Azure Group '{$azureGroupName}': " . $response->body());
+        }
+
+        Log::channel('azure')->info('User added to Azure Group successfully', [
+            'user_id' => $user->id,
+            'azure_id' => $user->azure_id,
+            'group_id' => $azureGroupId,
+            'group_name' => $azureGroupName,
+            'module' => $module->code,
+            'role_id' => $roleId
+        ]);
+
+        return [
+            'success' => true, 
+            'status' => 'assigned',
+            'group_name' => $azureGroupName,
+            'group_id' => $azureGroupId
+        ];
+
+    } catch (Exception $e) {
+        Log::channel('azure')->error('Azure Group assignment failed', [
+            'user_id' => $user->id,
+            'module_id' => $module->id,
+            'role_id' => $userModule->role_id ?? null,
+            'error' => $e->getMessage()
+        ]);
+
+        return ['success' => false, 'error' => $e->getMessage()];
+    }
+}
 
     /**
      * Assign Azure Enterprise App Role to user

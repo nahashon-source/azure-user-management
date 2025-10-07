@@ -499,6 +499,38 @@ public function edit(User $user)
     }
 
     /**
+ * Get roles for a specific module (API endpoint)
+ */
+public function getModuleRoles($moduleId)
+{
+    try {
+        $module = Module::with('roles')->findOrFail($moduleId);
+        
+        return response()->json([
+            'success' => true,
+            'module' => [
+                'id' => $module->id,
+                'name' => $module->name,
+                'code' => $module->code,
+            ],
+            'roles' => $module->roles->map(function($role) {
+                return [
+                    'id' => $role->id,
+                    'name' => $role->name,
+                    'description' => $role->description,
+                ];
+            })
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Module not found'
+        ], 404);
+    }
+}
+
+    /**
      * Disable the specified user via POST request (for AJAX)
      */
     public function disable(User $user)

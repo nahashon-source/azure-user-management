@@ -101,24 +101,25 @@
         margin-bottom: 20px;
     }
 
-    .module-card {
-        background: linear-gradient(145deg, #f0f2f5, #ffffff);
+ .module-card {
+        background: #e9ecef;
         border-radius: 12px;
         padding: 20px;
-        border: 2px solid #e1e8ed;
+        border: 2px solid #dee2e6;
         transition: all 0.3s ease;
         cursor: pointer;
     }
 
     .module-card:hover {
-        border-color: #3498db;
+        background: #dfe3e7;
+        border-color: #adb5bd;
         transform: translateY(-2px);
         box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
     }
 
     .module-card.active {
         border: 3px solid #27ae60 !important;
-        background: linear-gradient(145deg, #d4edda, #c3e6cb) !important;
+        background: #d4edda !important;
     }
 
     .module-header {

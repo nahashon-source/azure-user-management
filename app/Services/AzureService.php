@@ -280,84 +280,117 @@ class AzureService
         }
     }
 
-    /**
-     * Create a new user in Azure AD
-     * 
-     * @param array $userData
-     * @return array
-     * @throws Exception
-     */
-    public function createUser(array $userData): array
-    {
-        try {
-            // Generate UPN based on strategy
-            $upn = $this->generateUPN($userData);
-            
-            // Generate temporary password
-            $temporaryPassword = $this->generateSecurePassword();
-            
-            $requestBody = [
-                'accountEnabled' => true,
-                'displayName' => $userData['name'],
-                'mailNickname' => $this->generateMailNickname($userData),
-                'userPrincipalName' => $upn,
-                'passwordProfile' => [
-                    'forceChangePasswordNextSignIn' => config('azure.force_password_change', true),
-                    'password' => $temporaryPassword,
-                ],
-            ];
-            
-            // Optional fields
-            if (!empty($userData['email'])) {
-                $requestBody['mail'] = $userData['email'];
-            }
-            if (!empty($userData['phone'])) {
-                $requestBody['mobilePhone'] = $userData['phone'];
-            }
-            if (!empty($userData['job_title'])) {
-                $requestBody['jobTitle'] = $userData['job_title'];
-            }
-            if (!empty($userData['department'])) {
-                $requestBody['department'] = $userData['department'];
-            }
-            if (!empty($userData['employee_id'])) {
-                $requestBody['employeeId'] = $userData['employee_id'];
-            }
-            
-            $response = $this->makeRequestWithRetry(
-                'POST',
-                $this->graphApiBaseUrl . '/users',
-                $requestBody
-            );
-            
-            if (!$response->successful()) {
-                throw new Exception(
-                    'Failed to create user in Azure AD: ' . $response->body()
-                );
-            }
-            
-            $azureUser = $response->json();
-            
-            Log::channel('azure')->info('User created in Azure AD', [
-                'azure_id' => $azureUser['id'],
-                'upn' => $azureUser['userPrincipalName']
+   /**
+ * Create a new user in Azure AD (with duplicate check)
+ * 
+ * @param array $userData
+ * @return array
+ * @throws Exception
+ */
+public function createUser(array $userData): array
+{
+    try {
+        // Generate UPN based on strategy
+        $upn = $this->generateUPN($userData);
+
+        Log::channel('azure')->debug('Generated UPN for user creation', [
+            'generated_upn' => $upn,
+            'user_name' => $userData['name'],
+            'user_data' => $userData
+        ]);
+        
+        // ✅ CHECK IF USER ALREADY EXISTS IN AZURE
+        Log::channel('azure')->info('Checking if user exists in Azure AD', [
+            'upn' => $upn
+        ]);
+        
+        $existingUser = $this->findUserByUPN($upn);
+        
+        if ($existingUser) {
+            Log::channel('azure')->warning('User already exists in Azure AD, returning existing user', [
+                'upn' => $upn,
+                'azure_id' => $existingUser['id']
             ]);
             
+            // Return existing user data instead of failing
             return [
-                'azure_id' => $azureUser['id'],
-                'azure_upn' => $azureUser['userPrincipalName'],
-                'azure_display_name' => $azureUser['displayName'],
-                'temporary_password' => $temporaryPassword,
+                'azure_id' => $existingUser['id'],
+                'azure_upn' => $existingUser['userPrincipalName'],
+                'azure_display_name' => $existingUser['displayName'],
+                'temporary_password' => null, // No new password since user exists
             ];
-            
-        } catch (Exception $e) {
-            Log::channel('azure')->error('Failed to create user', [
-                'userData' => $userData,
-                'error' => $e->getMessage()
-            ]);
-            throw $e;
         }
+        
+        // User doesn't exist, proceed with creation
+        Log::channel('azure')->info('User not found in Azure, creating new user', [
+            'upn' => $upn
+        ]);
+        
+        // Generate temporary password
+        $temporaryPassword = $this->generateSecurePassword();
+        
+        $requestBody = [
+            'accountEnabled' => true,
+            'displayName' => $userData['name'],
+            'mailNickname' => $this->generateMailNickname($userData),
+            'userPrincipalName' => $upn,
+            'passwordProfile' => [
+                'forceChangePasswordNextSignIn' => config('azure.force_password_change', true),
+                'password' => $temporaryPassword,
+            ],
+        ];
+        
+        // Optional fields
+        if (!empty($userData['email'])) {
+            $requestBody['mail'] = $userData['email'];
+        }
+        if (!empty($userData['phone'])) {
+            $requestBody['mobilePhone'] = $userData['phone'];
+        }
+        if (!empty($userData['job_title'])) {
+            $requestBody['jobTitle'] = $userData['job_title'];
+        }
+        if (!empty($userData['department'])) {
+            $requestBody['department'] = $userData['department'];
+        }
+        if (!empty($userData['employee_id'])) {
+            $requestBody['employeeId'] = $userData['employee_id'];
+        }
+        
+        $response = $this->makeRequestWithRetry(
+            'POST',
+            $this->graphApiBaseUrl . '/users',
+            $requestBody
+        );
+        
+        if (!$response->successful()) {
+            throw new Exception(
+                'Failed to create user in Azure AD: ' . $response->body()
+            );
+        }
+        
+        $azureUser = $response->json();
+        
+        Log::channel('azure')->info('User created in Azure AD', [
+            'azure_id' => $azureUser['id'],
+            'upn' => $azureUser['userPrincipalName']
+        ]);
+        
+        return [
+            'azure_id' => $azureUser['id'],
+            'azure_upn' => $azureUser['userPrincipalName'],
+            'azure_display_name' => $azureUser['displayName'],
+            'temporary_password' => $temporaryPassword,
+        ];
+        
+    } catch (Exception $e) {
+        Log::channel('azure')->error('Failed to create user', [
+            'userData' => $userData,
+            'error' => $e->getMessage()
+        ]);
+        throw $e;
     }
+}
 
     /**
      * Update an existing user in Azure AD
@@ -415,6 +448,9 @@ class AzureService
             throw $e;
         }
     }
+
+
+    
 
     /**
      * Disable a user in Azure AD

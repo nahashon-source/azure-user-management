@@ -26,7 +26,7 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
             margin: 0;
             padding: 20px;
-            background: #f4f6f9;
+            background: #f5f5f5;
         }
 
         .header-controls {
@@ -644,7 +644,7 @@
             }
         }
 
-        @media (prefers-color-scheme: dark) {
+       // @media (prefers-color-scheme: dark) {
             :root {
                 --light-bg: rgba(44, 62, 80, 0.95);
                 --border-color: #34495e;
@@ -654,7 +654,7 @@
             }
 
             body {
-                background: #1a252f;
+                background: #eceff1;
             }
 
             .search-bar input,
