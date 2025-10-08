@@ -162,7 +162,383 @@ Once that's working, we can proceed with creating all the controllers, models, a
 
 
 
+# Role-Based Azure Group Assignment System
 
+## 📋 Overview
+
+This system enables **dynamic Azure AD group assignment based on user roles**. Instead of assigning all users to a single hardcoded group per module, users are now assigned to different groups based on their role within that module.
+
+### Example: Supply Chain Management (SCM)
+- **Manager** → Assigned to `SCM_PowerUser` group
+- **Officer** → Assigned to `SCM_BasicUser` group
+- **Admin** → Assigned to `SCM_PowerUser` group
+- **User** → Assigned to `SCM_BasicUser` group
+
+---
+
+## 🏗️ System Architecture
+
+### Database Structure
+
+#### **`module_role_groups` Table**
+Stores the mapping between modules, roles, and Azure groups.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | bigint | Primary key |
+| `module_id` | bigint | Foreign key to `modules` table |
+| `role_id` | bigint | Foreign key to `roles` table |
+| `azure_group_id` | varchar(255) | Azure AD Security Group UUID |
+| `azure_group_name` | varchar(255) | Human-readable group name |
+| `created_at` | timestamp | Record creation time |
+| `updated_at` | timestamp | Last update time |
+
+**Constraints:**
+- Unique combination of (`module_id`, `role_id`)
+- Each module-role pair can only have ONE Azure group
+
+---
+
+## 📊 Current Mappings
+
+### Supply Chain Management (Module ID: 2)
+
+| Role | Azure Group | Group ID |
+|------|-------------|----------|
+| Manager | SCM_PowerUser | `0c5a368f-3c3a-46dd-ab6d-5ca6d9edfabd` |
+| Officer | SCM_BasicUser | `7c9ca1a8-fa16-47c6-a889-38faf5f1d829` |
+| Admin | SCM_PowerUser | `0c5a368f-3c3a-46dd-ab6d-5ca6d9edfabd` |
+| User | SCM_BasicUser | `7c9ca1a8-fa16-47c6-a889-38faf5f1d829` |
+| Analyst | SCM_BasicUser | `7c9ca1a8-fa16-47c6-a889-38faf5f1d829` |
+| Coordinator | SCM_BasicUser | `7c9ca1a8-fa16-47c6-a889-38faf5f1d829` |
+| Consultant | SCM_BasicUser | `7c9ca1a8-fa16-47c6-a889-38faf5f1d829` |
+| Reviewer | SCM_BasicUser | `7c9ca1a8-fa16-47c6-a889-38faf5f1d829` |
+
+### Office Management (Module ID: 1)
+
+| Role | Azure Group | Group ID |
+|------|-------------|----------|
+| Manager | Odoo_Manager | `7f70ba1b-2bb6-4c70-83c9-d836623b5317` |
+| Officer | Odoo_Employee | `b4acd816-78c8-4310-a9b1-fca0f5ea2018` |
+| Admin | Odoo_Manager | `7f70ba1b-2bb6-4c70-83c9-d836623b5317` |
+| User | Odoo_Employee | `b4acd816-78c8-4310-a9b1-fca0f5ea2018` |
+| Analyst | Odoo_Employee | `b4acd816-78c8-4310-a9b1-fca0f5ea2018` |
+| Coordinator | Odoo_Employee | `b4acd816-78c8-4310-a9b1-fca0f5ea2018` |
+| Consultant | Odoo_Employee | `b4acd816-78c8-4310-a9b1-fca0f5ea2018` |
+| Reviewer | Odoo_Employee | `b4acd816-78c8-4310-a9b1-fca0f5ea2018` |
+
+### Business Intelligence (Module ID: 3) - TEMPORARY MAPPING
+> ⚠️ **Note:** Currently using HR groups as placeholders. Update when proper BIZ groups are available.
+
+| Role | Azure Group (Temporary) | Group ID |
+|------|------------------------|----------|
+| Manager | HR_Manager | `b7c16b40-fb3d-43cd-a9d1-03509ec5debd` |
+| Analyst | HR_Manager | `b7c16b40-fb3d-43cd-a9d1-03509ec5debd` |
+| Others | HR_Employee | `7bb64aa1-87a7-4f2b-bbc2-ee7852ed01b8` |
+
+### FITGAP Analysis (Module ID: 4) - TEMPORARY MAPPING
+> ⚠️ **Note:** Currently using Finance groups as placeholders. Update when proper FITGAP groups are available.
+
+| Role | Azure Group (Temporary) | Group ID |
+|------|------------------------|----------|
+| Manager | Finance_Editor | `205314fa-dc3e-4364-9d99-005df27ec2ca` |
+| Admin | Finance_Editor | `205314fa-dc3e-4364-9d99-005df27ec2ca` |
+| Analyst | Finance_Editor | `205314fa-dc3e-4364-9d99-005df27ec2ca` |
+| Others | Finance_Viewer | `4cfae354-25f3-4da8-9826-312bf8b7bb02` |
+
+---
+
+## 🔧 How to Add/Update Mappings
+
+### Option 1: Using Tinker (Quick Updates)
+
+```php
+php artisan tinker
+
+// Example: Update BIZ module when Amay provides correct groups
+DB::table('module_role_groups')
+    ->where('module_id', 3)  // BIZ module
+    ->where('role_id', 1)    // Manager role
+    ->update([
+        'azure_group_id' => 'NEW_AZURE_GROUP_UUID',
+        'azure_group_name' => 'BIZ_PowerUser'
+    ]);
+```
+
+### Option 2: Using SQL (Bulk Updates)
+
+```sql
+-- Update all BIZ mappings at once
+UPDATE module_role_groups 
+SET 
+    azure_group_id = 'new-group-uuid-here',
+    azure_group_name = 'BIZ_PowerUser'
+WHERE 
+    module_id = 3 
+    AND role_id IN (1, 3, 5);  -- Manager, Admin, Analyst
+```
+
+### Option 3: Add New Module Mappings
+
+```php
+php artisan tinker
+
+// Add mappings for a new module
+$mappings = [
+    ['module_id' => 5, 'role_id' => 1, 'azure_group_id' => 'uuid-1', 'azure_group_name' => 'NewModule_Admin'],
+    ['module_id' => 5, 'role_id' => 2, 'azure_group_id' => 'uuid-2', 'azure_group_name' => 'NewModule_User'],
+];
+
+DB::table('module_role_groups')->insert($mappings);
+```
+
+---
+
+## 🔍 How to Verify Mappings
+
+### Check Current Mappings for a Module
+
+```php
+php artisan tinker
+
+// View SCM mappings
+DB::table('module_role_groups')
+    ->where('module_id', 2)
+    ->join('roles', 'module_role_groups.role_id', '=', 'roles.id')
+    ->select('roles.name as role_name', 'azure_group_name', 'azure_group_id')
+    ->get();
+```
+
+### Test Role-Based Group Lookup
+
+```php
+php artisan tinker
+
+// Test what group a specific role gets
+$module = Module::find(2);  // SCM
+$groupInfo = $module->getAzureGroupForRole(2);  // Officer role
+print_r($groupInfo);
+
+// Should return:
+// Array (
+//     [group_id] => 7c9ca1a8-fa16-47c6-a889-38faf5f1d829
+//     [group_name] => SCM_BasicUser
+// )
+```
+
+---
+
+## 📝 Code Implementation
+
+### Key Files Modified
+
+1. **Migration:** `database/migrations/YYYY_MM_DD_create_module_role_groups_table.php`
+2. **Model:** `app/Models/ModuleRoleGroup.php`
+3. **Seeder:** `database/seeders/ModuleRoleGroupSeeder.php`
+4. **Module Model:** `app/Models/Module.php` (added `getAzureGroupForRole()`)
+5. **Assignment Service:** `app/Services/ModuleAssignmentService.php`
+
+### New Methods in Module Model
+
+```php
+// Get Azure group for a specific role
+public function getAzureGroupForRole(int $roleId): ?array
+{
+    $mapping = ModuleRoleGroup::where('module_id', $this->id)
+        ->where('role_id', $roleId)
+        ->first();
+    
+    return $mapping ? [
+        'group_id' => $mapping->azure_group_id,
+        'group_name' => $mapping->azure_group_name,
+    ] : null;
+}
+
+// Check if role mapping exists
+public function hasRoleMapping(int $roleId): bool
+{
+    return ModuleRoleGroup::where('module_id', $this->id)
+        ->where('role_id', $roleId)
+        ->exists();
+}
+```
+
+---
+
+## 🧪 Testing
+
+### Test User Assignment
+
+```php
+php artisan tinker
+
+$assignmentService = app(\App\Services\ModuleAssignmentService::class);
+$user = User::find(30);
+$module = Module::find(2);  // SCM
+$roleId = 2;  // Officer
+
+$result = $assignmentService->assignUserToModule($user, $module, $roleId);
+print_r($result);
+```
+
+### Check Logs
+
+```bash
+# View Azure assignment logs
+tail -f storage/logs/azure.log
+
+# Look for entries like:
+# [2025-10-07 21:00:02] Attempting Azure group assignment
+# {"user_id":30,"module":"Supply Chain Management","role_id":2,
+#  "azure_group_id":"7c9ca1a8...","azure_group_name":"SCM_BasicUser"}
+```
+
+---
+
+## ⚠️ Important Notes for Amay
+
+### When Adding New Modules
+
+1. **Create Azure Groups first** in Azure AD:
+   - At minimum: `ModuleName_PowerUser` and `ModuleName_BasicUser`
+   - Note down the Group UUIDs
+
+2. **Add mappings** to `module_role_groups` table:
+   ```sql
+   INSERT INTO module_role_groups (module_id, role_id, azure_group_id, azure_group_name) 
+   VALUES 
+       (5, 1, 'power-user-uuid', 'NewModule_PowerUser'),
+       (5, 2, 'basic-user-uuid', 'NewModule_BasicUser');
+   ```
+
+3. **No code changes required!** The system automatically uses the mappings.
+
+### When Updating BIZ/FITGAP Groups
+
+Once you have the correct Azure groups for BIZ and FITGAP:
+
+```sql
+-- Update BIZ mappings (Module ID: 3)
+UPDATE module_role_groups 
+SET 
+    azure_group_id = 'your-biz-poweruser-uuid',
+    azure_group_name = 'BIZ_PowerUser'
+WHERE module_id = 3 AND role_id IN (1, 3, 5);
+
+UPDATE module_role_groups 
+SET 
+    azure_group_id = 'your-biz-basicuser-uuid',
+    azure_group_name = 'BIZ_BasicUser'
+WHERE module_id = 3 AND role_id IN (2, 4, 6, 7, 8);
+
+-- Repeat for FITGAP (Module ID: 4)
+```
+
+---
+
+## 🐛 Troubleshooting
+
+### Issue: User assigned to wrong group
+
+**Check the mapping:**
+```php
+php artisan tinker
+$module = Module::find(2);
+$groupInfo = $module->getAzureGroupForRole(YOUR_ROLE_ID);
+print_r($groupInfo);
+```
+
+**Fix:** Update the mapping in database.
+
+### Issue: "No Azure group mapping found"
+
+**Cause:** Missing entry in `module_role_groups` table.
+
+**Fix:** Add the mapping:
+```sql
+INSERT INTO module_role_groups (module_id, role_id, azure_group_id, azure_group_name)
+VALUES (2, 5, 'your-group-uuid', 'YourGroupName');
+```
+
+### Issue: Assignment shows "already member" error
+
+**Cause:** User is already in the group (expected behavior).
+
+**Status:** This is actually a success! The system tried to add them but Azure said they're already there.
+
+---
+
+## 📊 Database Queries for Reporting
+
+### View All Mappings
+
+```sql
+SELECT 
+    m.name AS module_name,
+    r.name AS role_name,
+    mrg.azure_group_name,
+    mrg.azure_group_id
+FROM module_role_groups mrg
+JOIN modules m ON mrg.module_id = m.id
+JOIN roles r ON mrg.role_id = r.id
+ORDER BY m.name, r.name;
+```
+
+### Find Users with Specific Module-Role Combination
+
+```sql
+SELECT 
+    u.name AS user_name,
+    u.email,
+    m.name AS module_name,
+    r.name AS role_name,
+    mrg.azure_group_name
+FROM user_modules um
+JOIN users u ON um.user_id = u.id
+JOIN modules m ON um.module_id = m.id
+JOIN roles r ON um.role_id = r.id
+JOIN module_role_groups mrg ON mrg.module_id = um.module_id AND mrg.role_id = um.role_id
+WHERE m.id = 2;  -- SCM module
+```
+
+### Count Users per Group
+
+```sql
+SELECT 
+    m.name AS module_name,
+    mrg.azure_group_name,
+    COUNT(DISTINCT um.user_id) AS user_count
+FROM module_role_groups mrg
+JOIN user_modules um ON mrg.module_id = um.module_id AND mrg.role_id = um.role_id
+JOIN modules m ON mrg.module_id = m.id
+GROUP BY m.name, mrg.azure_group_name
+ORDER BY m.name, user_count DESC;
+```
+
+---
+
+## 🎯 Benefits of This System
+
+1. **Flexible:** Add new modules/groups without code changes
+2. **Role-Based:** Different permissions based on user role
+3. **Maintainable:** All mappings in one table
+4. **Auditable:** Logs show exactly which group users are assigned to
+5. **Scalable:** Easy to add more roles or modules
+
+---
+
+## 📞 Support
+
+For questions or issues:
+- Check logs: `storage/logs/azure.log`
+- Review mappings: `SELECT * FROM module_role_groups;`
+- Test assignments using the examples above
+
+---
+
+**Last Updated:** October 7, 2025  
+**Version:** 1.0  
+**Author:** Development Team
 
 
 
