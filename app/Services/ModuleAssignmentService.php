@@ -196,18 +196,18 @@ private function assignToAzureGroup(User $user, Module $module, UserModule $user
             }
 
                 // Handle "already exists" error from Microsoft Graph API
-    if ($response->status() === 400) {
-        $errorBody = $response->json();
-        if (isset($errorBody['error']['message']) && 
-            str_contains($errorBody['error']['message'], 'already exist')) {
-            Log::channel('azure')->info('User already member of Azure Group (400)', [
-                'user_id' => $user->id,
-                'group_id' => $azureGroupId,
-                'group_name' => $azureGroupName
-            ]);
-            return ['success' => true, 'status' => 'already_member', 'group_name' => $azureGroupName];
-        }
-    }
+                if ($response->status() === 400) {
+                    $errorBody = $response->json();
+                    if (isset($errorBody['error']['message']) && 
+                        str_contains($errorBody['error']['message'], 'already exist')) {
+                        Log::channel('azure')->info('User already member of Azure Group', [
+                            'user_id' => $user->id,
+                            'group_id' => $azureGroupId,
+                            'group_name' => $azureGroupName
+                        ]);
+                        return ['success' => true, 'status' => 'already_member', 'group_name' => $azureGroupName];
+                    }
+                }
 
             throw new Exception("Failed to add user to Azure Group '{$azureGroupName}': " . $response->body());
         }
